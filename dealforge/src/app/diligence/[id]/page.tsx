@@ -140,6 +140,49 @@ export default function DDProjectDetailPage() {
         </div>
       </div>
 
+      {/* Approval Gates */}
+      <div className="glass-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-medium">Phase Gates</span>
+          <span className="text-xs" style={{ color: 'var(--muted)' }}>Approval required to advance phases</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {(['preliminary', 'detailed', 'confirmatory', 'complete'] as DDPhase[]).map((phase, i) => {
+            const gate = gates.find(g => g.phase === phase);
+            const isCurrent = project.phase === phase;
+            const isPast = ['preliminary', 'detailed', 'confirmatory', 'complete'].indexOf(project.phase) > i;
+            const isApproved = gate?.status === 'approved';
+            return (
+              <div key={phase} className="flex items-center gap-2 flex-1">
+                <button
+                  onClick={() => {
+                    if (gate) {
+                      const next = gate.status === 'approved' ? 'pending' : 'approved';
+                      updateApprovalGate(gate.id, { status: next, decision_date: next === 'approved' ? new Date().toISOString() : undefined });
+                    } else {
+                      createApprovalGate({ project_id: id, phase, title: `${phase} gate`, status: 'approved', decision_date: new Date().toISOString() });
+                    }
+                    reload();
+                  }}
+                  className="flex-1 py-2 rounded-lg text-xs font-medium text-center transition-all"
+                  style={{
+                    background: isApproved || isPast ? 'rgba(16,185,129,0.15)' : isCurrent ? 'var(--accent-muted)' : 'var(--background)',
+                    color: isApproved || isPast ? 'var(--success)' : isCurrent ? 'var(--accent)' : 'var(--muted)',
+                    border: isCurrent ? '1px solid var(--accent)' : '1px solid transparent',
+                  }}
+                >
+                  <div className="capitalize">{phase}</div>
+                  <div className="text-xs mt-0.5 opacity-70">
+                    {isApproved ? 'Approved' : isPast ? 'Passed' : isCurrent ? 'Current' : 'Pending'}
+                  </div>
+                </button>
+                {i < 3 && <ChevronRight size={14} style={{ color: 'var(--muted)', flexShrink: 0 }} />}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Tabs */}
       <div className="flex gap-1 p-1 rounded-lg w-fit" style={{ background: 'var(--card)' }}>
         {([
@@ -201,40 +244,76 @@ export default function DDProjectDetailPage() {
   );
 }
 
-// === WORKSTREAM SECTION ===
+// === WORKSTREAM SECTION (Hierarchical) ===
 function WorkstreamSection({ workstream, expanded, onToggle, onReload }: {
   workstream: DDWorkstream; expanded: boolean; onToggle: () => void; onReload: () => void;
 }) {
   const [tasks, setTasks] = useState<DDTask[]>([]);
-  const [showAddTask, setShowAddTask] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<DDTask['priority']>('medium');
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (expanded) setTasks(getDDTasks(workstream.id));
   }, [expanded, workstream.id]);
 
+  const refreshTasks = () => { setTasks(getDDTasks(workstream.id)); onReload(); };
+
   const handleAddTask = () => {
     if (!newTaskTitle.trim()) return;
     createDDTask({ workstream_id: workstream.id, title: newTaskTitle, priority: newTaskPriority });
     setNewTaskTitle('');
-    setTasks(getDDTasks(workstream.id));
-    onReload();
+    refreshTasks();
   };
 
   const handleStatusChange = (taskId: string, status: DDStatus) => {
     updateDDTask(taskId, { status });
-    setTasks(getDDTasks(workstream.id));
-    onReload();
+    refreshTasks();
   };
 
   const handleDeleteTask = (taskId: string) => {
     deleteDDTask(taskId);
-    setTasks(getDDTasks(workstream.id));
-    onReload();
+    refreshTasks();
   };
 
+  const toggleGroupCollapse = (groupId: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      next.has(groupId) ? next.delete(groupId) : next.add(groupId);
+      return next;
+    });
+  };
+
+  const toggleDescription = (taskId: string) => {
+    setExpandedDescriptions(prev => {
+      const next = new Set(prev);
+      next.has(taskId) ? next.delete(taskId) : next.add(taskId);
+      return next;
+    });
+  };
+
+  // Mark all children of a parent complete/not_started
+  const bulkSetGroupStatus = (parentId: string, status: DDStatus) => {
+    const children = tasks.filter(t => t.parent_task_id === parentId);
+    for (const child of children) {
+      updateDDTask(child.id, { status });
+    }
+    updateDDTask(parentId, { status });
+    refreshTasks();
+  };
+
+  // Group tasks: parents (no parent_task_id) and their children
+  const parentTasks = tasks.filter(t => !t.parent_task_id);
+  const orphanTasks = tasks.filter(t => t.parent_task_id && !parentTasks.find(p => p.id === t.parent_task_id));
+  const getChildren = (parentId: string) => tasks.filter(t => t.parent_task_id === parentId);
+
   const wsInfo = DD_WORKSTREAMS.find(w => w.key === workstream.key);
+
+  // Stats
+  const totalTasks = tasks.filter(t => t.parent_task_id).length || tasks.length;
+  const completeTasks = tasks.filter(t => (t.parent_task_id || parentTasks.length === 0) && t.status === 'complete').length;
+  const blockedTasks = tasks.filter(t => t.status === 'blocked').length;
 
   return (
     <div className="glass-card overflow-hidden">
@@ -244,6 +323,10 @@ function WorkstreamSection({ workstream, expanded, onToggle, onReload }: {
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm">{workstream.label}</span>
             <RAGDot status={workstream.rag_status} size={8} />
+            <span className="text-xs" style={{ color: 'var(--muted)' }}>
+              {completeTasks}/{totalTasks} tasks
+              {blockedTasks > 0 && <span style={{ color: 'var(--danger)' }}> · {blockedTasks} blocked</span>}
+            </span>
           </div>
           <div className="text-xs" style={{ color: 'var(--muted)' }}>{wsInfo?.description}</div>
         </div>
@@ -256,47 +339,166 @@ function WorkstreamSection({ workstream, expanded, onToggle, onReload }: {
 
       {expanded && (
         <div className="border-t px-4 pb-4 pt-3" style={{ borderColor: 'var(--border)' }}>
-          {/* Task list */}
-          <div className="space-y-1.5">
-            {tasks.map(task => (
-              <div key={task.id} className="flex items-center gap-2 p-2 rounded-lg text-sm group" style={{ background: 'var(--background)' }}>
-                <button onClick={() => handleStatusChange(task.id, task.status === 'complete' ? 'not_started' : 'complete')}>
-                  {STATUS_ICONS[task.status]}
-                </button>
-                <span className={task.status === 'complete' ? 'line-through opacity-50' : ''}>{task.title}</span>
-                <span className="ml-auto badge" style={{
-                  background: task.priority === 'critical' ? 'rgba(239,68,68,0.15)' : task.priority === 'high' ? 'rgba(245,158,11,0.15)' : 'transparent',
-                  color: task.priority === 'critical' ? 'var(--danger)' : task.priority === 'high' ? 'var(--warning)' : 'var(--muted)',
-                  fontSize: '0.65rem',
-                }}>
-                  {task.priority}
-                </span>
-                <select
-                  value={task.status}
-                  onChange={e => handleStatusChange(task.id, e.target.value as DDStatus)}
-                  className="text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{ width: 100, padding: '2px 4px' }}
-                >
-                  <option value="not_started">Not Started</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="blocked">Blocked</option>
-                  <option value="complete">Complete</option>
-                  <option value="n_a">N/A</option>
-                </select>
-                <button onClick={() => handleDeleteTask(task.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Trash2 size={12} style={{ color: 'var(--danger)' }} />
-                </button>
+          {/* Hierarchical task groups */}
+          <div className="space-y-3">
+            {parentTasks.map(parent => {
+              const children = getChildren(parent.id);
+              const isCollapsed = collapsedGroups.has(parent.id);
+              const hasChildren = children.length > 0;
+              const childComplete = children.filter(c => c.status === 'complete' || c.status === 'n_a').length;
+              const groupProgress = hasChildren ? Math.round((childComplete / children.length) * 100) : (parent.status === 'complete' ? 100 : 0);
+
+              return (
+                <div key={parent.id} className="rounded-lg" style={{ background: 'var(--background)' }}>
+                  {/* Group header (parent task) */}
+                  <div className="flex items-center gap-2 p-2.5">
+                    {hasChildren ? (
+                      <button onClick={() => toggleGroupCollapse(parent.id)} className="p-0.5">
+                        {isCollapsed ? <ChevronRight size={14} style={{ color: 'var(--muted)' }} /> : <ChevronDown size={14} style={{ color: 'var(--muted)' }} />}
+                      </button>
+                    ) : (
+                      <button onClick={() => handleStatusChange(parent.id, parent.status === 'complete' ? 'not_started' : 'complete')}>
+                        {STATUS_ICONS[parent.status]}
+                      </button>
+                    )}
+                    <BookOpen size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                    <span className="font-medium text-sm flex-1">{parent.title}</span>
+                    {hasChildren && (
+                      <span className="text-xs font-mono px-2 py-0.5 rounded" style={{
+                        background: groupProgress === 100 ? 'rgba(16,185,129,0.15)' : 'var(--card)',
+                        color: groupProgress === 100 ? 'var(--success)' : 'var(--muted-foreground)',
+                      }}>
+                        {childComplete}/{children.length}
+                      </span>
+                    )}
+                    <span className="badge" style={{
+                      background: parent.priority === 'critical' ? 'rgba(239,68,68,0.15)' : parent.priority === 'high' ? 'rgba(245,158,11,0.15)' : 'transparent',
+                      color: parent.priority === 'critical' ? 'var(--danger)' : parent.priority === 'high' ? 'var(--warning)' : 'var(--muted)',
+                      fontSize: '0.65rem',
+                    }}>
+                      {parent.priority}
+                    </span>
+                    {hasChildren && (
+                      <button
+                        onClick={() => bulkSetGroupStatus(parent.id, childComplete === children.length ? 'not_started' : 'complete')}
+                        className="btn btn-ghost btn-sm text-xs"
+                        title={childComplete === children.length ? 'Reset all' : 'Complete all'}
+                      >
+                        {childComplete === children.length ? 'Reset' : 'All'}
+                      </button>
+                    )}
+                    <button onClick={() => handleDeleteTask(parent.id)} className="opacity-0 group-hover:opacity-100">
+                      <Trash2 size={12} style={{ color: 'var(--danger)' }} />
+                    </button>
+                  </div>
+
+                  {/* Group description */}
+                  {parent.description && (
+                    <div className="px-9 pb-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>{parent.description}</div>
+                  )}
+
+                  {/* Child tasks */}
+                  {hasChildren && !isCollapsed && (
+                    <div className="pl-9 pr-2 pb-2 space-y-0.5">
+                      {children.map(task => (
+                        <div key={task.id} className="group">
+                          <div className="flex items-start gap-2 p-1.5 rounded text-sm hover:bg-opacity-50">
+                            <button onClick={() => handleStatusChange(task.id, task.status === 'complete' ? 'not_started' : 'complete')} className="mt-0.5 flex-shrink-0">
+                              {STATUS_ICONS[task.status]}
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1">
+                                <span className={`${task.status === 'complete' ? 'line-through opacity-50' : ''}`}>{task.title}</span>
+                                {task.description && (
+                                  <button onClick={() => toggleDescription(task.id)} className="flex-shrink-0 opacity-50 hover:opacity-100">
+                                    <Eye size={11} />
+                                  </button>
+                                )}
+                              </div>
+                              {task.description && expandedDescriptions.has(task.id) && (
+                                <p className="text-xs mt-1 p-1.5 rounded" style={{ background: 'var(--card)', color: 'var(--muted-foreground)' }}>
+                                  {task.description}
+                                </p>
+                              )}
+                            </div>
+                            <span className="badge flex-shrink-0" style={{
+                              background: task.priority === 'critical' ? 'rgba(239,68,68,0.15)' : task.priority === 'high' ? 'rgba(245,158,11,0.15)' : 'transparent',
+                              color: task.priority === 'critical' ? 'var(--danger)' : task.priority === 'high' ? 'var(--warning)' : 'var(--muted)',
+                              fontSize: '0.6rem',
+                            }}>
+                              {task.priority}
+                            </span>
+                            <select
+                              value={task.status}
+                              onChange={e => handleStatusChange(task.id, e.target.value as DDStatus)}
+                              className="text-xs opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                              style={{ width: 90, padding: '1px 2px' }}
+                            >
+                              <option value="not_started">Not Started</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="blocked">Blocked</option>
+                              <option value="complete">Complete</option>
+                              <option value="n_a">N/A</option>
+                            </select>
+                            <button onClick={() => handleDeleteTask(task.id)} className="opacity-0 group-hover:opacity-100 flex-shrink-0">
+                              <Trash2 size={11} style={{ color: 'var(--danger)' }} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Group progress bar */}
+                  {hasChildren && (
+                    <div className="px-9 pb-2">
+                      <div className="progress-bar w-full" style={{ height: 3 }}>
+                        <div className="progress-fill" style={{ width: `${groupProgress}%`, background: groupProgress === 100 ? 'var(--success)' : 'var(--accent)' }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Orphan tasks (no parent) - render flat */}
+            {orphanTasks.length > 0 && (
+              <div className="rounded-lg p-2 space-y-1" style={{ background: 'var(--background)' }}>
+                <div className="text-xs font-medium px-2 mb-1" style={{ color: 'var(--muted)' }}>Uncategorized Tasks</div>
+                {orphanTasks.map(task => (
+                  <div key={task.id} className="flex items-center gap-2 p-1.5 rounded text-sm group">
+                    <button onClick={() => handleStatusChange(task.id, task.status === 'complete' ? 'not_started' : 'complete')}>
+                      {STATUS_ICONS[task.status]}
+                    </button>
+                    <span className={`flex-1 ${task.status === 'complete' ? 'line-through opacity-50' : ''}`}>{task.title}</span>
+                    <select
+                      value={task.status}
+                      onChange={e => handleStatusChange(task.id, e.target.value as DDStatus)}
+                      className="text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                      style={{ width: 90, padding: '1px 2px' }}
+                    >
+                      <option value="not_started">Not Started</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="blocked">Blocked</option>
+                      <option value="complete">Complete</option>
+                      <option value="n_a">N/A</option>
+                    </select>
+                    <button onClick={() => handleDeleteTask(task.id)} className="opacity-0 group-hover:opacity-100">
+                      <Trash2 size={11} style={{ color: 'var(--danger)' }} />
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
 
           {/* Add task inline */}
-          <div className="flex items-center gap-2 mt-3">
+          <div className="flex items-center gap-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
             <input
               value={newTaskTitle}
               onChange={e => setNewTaskTitle(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAddTask()}
-              placeholder="Add task..."
+              placeholder="Add custom task..."
               className="flex-1 text-sm"
             />
             <select value={newTaskPriority} onChange={e => setNewTaskPriority(e.target.value as DDTask['priority'])} className="text-xs" style={{ width: 90 }}>
@@ -336,32 +538,70 @@ function RisksPanel({ projectId, risks, onReload }: { projectId: string; risks: 
         <button onClick={() => setShowAdd(true)} className="btn btn-primary btn-sm"><Plus size={14} /> Add Risk</button>
       </div>
 
-      {/* Risk Matrix Summary */}
-      <div className="glass-card p-4">
-        <div className="grid grid-cols-4 gap-4 text-center text-xs">
-          <div>
-            <div className="text-2xl font-bold" style={{ color: 'var(--danger)' }}>
-              {risks.filter(r => (r.risk_score || 0) >= 15 && r.status !== 'closed').length}
+      {/* Risk Summary + 5x5 Heatmap */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="glass-card p-4">
+          <div className="text-xs font-medium mb-3" style={{ color: 'var(--muted-foreground)' }}>Risk Summary</div>
+          <div className="grid grid-cols-4 gap-4 text-center text-xs">
+            <div>
+              <div className="text-2xl font-bold" style={{ color: 'var(--danger)' }}>
+                {risks.filter(r => (r.risk_score || 0) >= 15 && r.status !== 'closed').length}
+              </div>
+              <div style={{ color: 'var(--muted-foreground)' }}>Critical</div>
             </div>
-            <div style={{ color: 'var(--muted-foreground)' }}>Critical</div>
+            <div>
+              <div className="text-2xl font-bold" style={{ color: 'var(--warning)' }}>
+                {risks.filter(r => (r.risk_score || 0) >= 8 && (r.risk_score || 0) < 15 && r.status !== 'closed').length}
+              </div>
+              <div style={{ color: 'var(--muted-foreground)' }}>High</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold" style={{ color: 'var(--accent)' }}>
+                {risks.filter(r => (r.risk_score || 0) >= 4 && (r.risk_score || 0) < 8 && r.status !== 'closed').length}
+              </div>
+              <div style={{ color: 'var(--muted-foreground)' }}>Medium</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold" style={{ color: 'var(--success)' }}>
+                {risks.filter(r => (r.risk_score || 0) < 4 && r.status !== 'closed').length}
+              </div>
+              <div style={{ color: 'var(--muted-foreground)' }}>Low</div>
+            </div>
           </div>
-          <div>
-            <div className="text-2xl font-bold" style={{ color: 'var(--warning)' }}>
-              {risks.filter(r => (r.risk_score || 0) >= 8 && (r.risk_score || 0) < 15 && r.status !== 'closed').length}
+        </div>
+
+        {/* 5x5 Heatmap */}
+        <div className="glass-card p-4">
+          <div className="text-xs font-medium mb-3" style={{ color: 'var(--muted-foreground)' }}>Impact vs Probability Matrix</div>
+          <div className="flex gap-1">
+            <div className="flex flex-col justify-between items-center mr-1 py-1" style={{ fontSize: '0.6rem', color: 'var(--muted)', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+              IMPACT
             </div>
-            <div style={{ color: 'var(--muted-foreground)' }}>High</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold" style={{ color: 'var(--accent)' }}>
-              {risks.filter(r => (r.risk_score || 0) >= 4 && (r.risk_score || 0) < 8 && r.status !== 'closed').length}
+            <div className="flex-1">
+              <div className="grid grid-cols-5 gap-0.5">
+                {[5, 4, 3, 2, 1].map(impact =>
+                  [1, 2, 3, 4, 5].map(prob => {
+                    const score = impact * prob;
+                    const count = risks.filter(r => r.impact === impact && r.probability === prob && r.status !== 'closed').length;
+                    const bg = score >= 15 ? 'rgba(239,68,68,0.6)' : score >= 10 ? 'rgba(239,68,68,0.3)' : score >= 6 ? 'rgba(245,158,11,0.3)' : score >= 3 ? 'rgba(59,130,246,0.2)' : 'rgba(16,185,129,0.15)';
+                    return (
+                      <div
+                        key={`${impact}-${prob}`}
+                        className="aspect-square rounded flex items-center justify-center text-xs font-bold"
+                        style={{ background: bg, color: count > 0 ? 'var(--foreground)' : 'transparent', minHeight: 28 }}
+                        title={`Impact ${impact} × Prob ${prob} = ${score}`}
+                      >
+                        {count > 0 ? count : ''}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              <div className="flex justify-between mt-1 px-1" style={{ fontSize: '0.55rem', color: 'var(--muted)' }}>
+                <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+              </div>
+              <div className="text-center mt-0.5" style={{ fontSize: '0.6rem', color: 'var(--muted)' }}>PROBABILITY</div>
             </div>
-            <div style={{ color: 'var(--muted-foreground)' }}>Medium</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold" style={{ color: 'var(--success)' }}>
-              {risks.filter(r => (r.risk_score || 0) < 4 && r.status !== 'closed').length}
-            </div>
-            <div style={{ color: 'var(--muted-foreground)' }}>Low</div>
           </div>
         </div>
       </div>

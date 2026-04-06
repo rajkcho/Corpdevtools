@@ -6,8 +6,8 @@ import {
   LayoutDashboard,
   Target,
   KanbanSquare,
-  ClipboardCheck,
   FileSearch,
+  Settings,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { href: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
   { href: '/targets', label: 'Targets', icon: Target },
   { href: '/diligence', label: 'Due Diligence', icon: FileSearch },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export default function Sidebar() {
