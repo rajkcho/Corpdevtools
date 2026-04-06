@@ -264,6 +264,29 @@ export default function SettingsPage() {
           </button>
         </div>
       </div>
+
+      {/* Demo Data */}
+      <div className="glass-card p-5 space-y-4">
+        <h2 className="font-semibold">Demo Data</h2>
+        <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+          Load sample targets, touchpoints, a DD project with risks and findings to explore the platform.
+          Includes 10 sample VMS companies across various verticals with realistic data.
+        </p>
+        <button
+          onClick={() => {
+            import('@/lib/seed').then(mod => {
+              if (mod.hasDemoData()) {
+                if (!confirm('You already have data. Loading demo data will add to it. Continue?')) return;
+              }
+              mod.seedDemoData();
+              alert('Demo data loaded! Navigate to Pipeline or Dashboard to see it.');
+            });
+          }}
+          className="btn btn-secondary"
+        >
+          Load Demo Data
+        </button>
+      </div>
     </div>
   );
 }
