@@ -348,6 +348,7 @@ export default function TargetDetailPage() {
       <Modal open={showUploadModal} onClose={() => setShowUploadModal(false)} title="Upload Meeting Notes">
         <MeetingNoteUpload
           targetId={id}
+          targetName={target.name}
           onDone={() => { reload(); setShowUploadModal(false); }}
           onCancel={() => setShowUploadModal(false)}
         />
@@ -471,10 +472,18 @@ function ContactForm({ onSubmit, onCancel }: { onSubmit: (data: Partial<Contact>
   );
 }
 
-function MeetingNoteUpload({ targetId, onDone, onCancel }: { targetId: string; onDone: () => void; onCancel: () => void }) {
+function MeetingNoteUpload({ targetId, targetName, onDone, onCancel }: { targetId: string; targetName: string; onDone: () => void; onCancel: () => void }) {
   const [rawText, setRawText] = useState('');
   const [fileName, setFileName] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [aiAvailable, setAIAvailable] = useState(false);
+  const [useAI, setUseAI] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    import('@/lib/ai').then(mod => setAIAvailable(mod.isAIConfigured()));
+  }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -489,9 +498,43 @@ function MeetingNoteUpload({ targetId, onDone, onCancel }: { targetId: string; o
     reader.readAsText(file);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setUploading(true);
+    setError(null);
+
+    let aiSummary: string | undefined;
+    let aiActionItems: { text: string; assignee?: string; due_date?: string; completed: boolean }[] | undefined;
+    let aiKeyInsights: string[] | undefined;
+    let aiDealSignals: { signal: string; sentiment: 'positive' | 'negative' | 'neutral'; detail?: string }[] | undefined;
+
+    // Run AI analysis if available and enabled
+    if (aiAvailable && useAI && rawText.trim()) {
+      try {
+        setAnalyzing(true);
+        const { analyzeMeetingNotes } = await import('@/lib/ai');
+        const analysis = await analyzeMeetingNotes(rawText, targetName);
+        aiSummary = analysis.summary;
+        aiActionItems = analysis.action_items.map(a => ({ ...a, completed: false }));
+        aiKeyInsights = analysis.key_insights;
+        aiDealSignals = analysis.deal_signals;
+
+        // Auto-create contacts if mentioned
+        if (analysis.mentioned_contacts?.length > 0) {
+          const existingContacts = getContacts(targetId);
+          for (const mc of analysis.mentioned_contacts) {
+            const exists = existingContacts.some(c => c.name.toLowerCase() === mc.name.toLowerCase());
+            if (!exists && mc.name) {
+              createContact({ target_id: targetId, name: mc.name, title: mc.title, is_primary: false });
+            }
+          }
+        }
+      } catch (err) {
+        setError(`AI analysis failed: ${err instanceof Error ? err.message : 'Unknown error'}. Notes saved without AI analysis.`);
+      } finally {
+        setAnalyzing(false);
+      }
+    }
 
     createMeetingNote({
       target_id: targetId,
@@ -499,6 +542,10 @@ function MeetingNoteUpload({ targetId, onDone, onCancel }: { targetId: string; o
       file_type: 'text',
       file_url: '',
       raw_text: rawText,
+      ai_summary: aiSummary,
+      ai_action_items: aiActionItems,
+      ai_key_insights: aiKeyInsights,
+      ai_deal_signals: aiDealSignals,
     });
 
     // Also create a touchpoint for the meeting
@@ -507,7 +554,7 @@ function MeetingNoteUpload({ targetId, onDone, onCancel }: { targetId: string; o
       type: 'meeting',
       date: new Date().toISOString(),
       subject: `Meeting notes: ${fileName || 'Manual entry'}`,
-      summary: rawText.substring(0, 500),
+      summary: aiSummary || rawText.substring(0, 500),
     });
 
     onDone();
@@ -549,13 +596,38 @@ function MeetingNoteUpload({ targetId, onDone, onCancel }: { targetId: string; o
           placeholder="Paste your meeting notes here...&#10;&#10;Attendees: ...&#10;Date: ...&#10;&#10;Key Discussion Points:&#10;- ...&#10;&#10;Action Items:&#10;- ..."
         />
       </div>
-      <div className="p-3 rounded-lg text-xs" style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>
-        AI summarization placeholder: When you connect an AI provider (OpenRouter, etc.), uploaded notes will be automatically summarized with extracted action items, key insights, and deal signals.
-      </div>
+
+      {/* AI Analysis Toggle */}
+      {aiAvailable ? (
+        <div className="p-3 rounded-lg" style={{ background: 'rgba(16,185,129,0.1)' }}>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" checked={useAI} onChange={e => setUseAI(e.target.checked)} className="mt-0.5" />
+            <div>
+              <div className="text-sm font-medium" style={{ color: 'var(--success)' }}>AI Analysis Enabled</div>
+              <div className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
+                Meeting notes will be analyzed to extract: executive summary, action items, key insights,
+                deal signals (positive/negative), and mentioned contacts.
+              </div>
+            </div>
+          </label>
+        </div>
+      ) : (
+        <div className="p-3 rounded-lg text-xs" style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>
+          AI not configured. Go to Settings to connect an AI provider (OpenRouter, OpenAI, etc.) for automatic
+          meeting note analysis with action items, deal signals, and insights extraction.
+        </div>
+      )}
+
+      {error && (
+        <div className="p-3 rounded-lg text-sm" style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--danger)' }}>
+          {error}
+        </div>
+      )}
+
       <div className="flex justify-end gap-2 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
         <button type="button" onClick={onCancel} className="btn btn-secondary">Cancel</button>
-        <button type="submit" disabled={!rawText.trim()} className="btn btn-primary">
-          {uploading ? 'Saving...' : 'Save Notes'}
+        <button type="submit" disabled={!rawText.trim() || uploading} className="btn btn-primary">
+          {analyzing ? 'Analyzing with AI...' : uploading ? 'Saving...' : aiAvailable && useAI ? 'Save & Analyze' : 'Save Notes'}
         </button>
       </div>
     </form>
@@ -564,6 +636,8 @@ function MeetingNoteUpload({ targetId, onDone, onCancel }: { targetId: string; o
 
 function MeetingNoteCard({ note, onDelete }: { note: MeetingNote; onDelete: () => void }) {
   const [expanded, setExpanded] = useState(false);
+  const hasAI = !!(note.ai_summary || note.ai_action_items?.length || note.ai_key_insights?.length || note.ai_deal_signals?.length);
+  const sentimentColors: Record<string, string> = { positive: 'var(--success)', negative: 'var(--danger)', neutral: 'var(--muted-foreground)' };
 
   return (
     <div className="glass-card p-4">
@@ -571,6 +645,9 @@ function MeetingNoteCard({ note, onDelete }: { note: MeetingNote; onDelete: () =
         <div className="flex items-center gap-2">
           <FileText size={16} style={{ color: 'var(--accent)' }} />
           <span className="font-medium text-sm">{note.file_name}</span>
+          {hasAI && (
+            <span className="badge" style={{ background: 'rgba(16,185,129,0.15)', color: 'var(--success)' }}>AI Analyzed</span>
+          )}
           <span className="text-xs" style={{ color: 'var(--muted)' }}>
             {new Date(note.uploaded_at).toLocaleDateString()}
           </span>
@@ -586,20 +663,53 @@ function MeetingNoteCard({ note, onDelete }: { note: MeetingNote; onDelete: () =
       </div>
 
       {note.ai_summary && (
-        <div className="mt-2 p-2 rounded text-sm" style={{ background: 'var(--accent-muted)' }}>
-          <strong className="text-xs" style={{ color: 'var(--accent)' }}>AI Summary:</strong>
-          <p className="mt-1" style={{ color: 'var(--foreground)' }}>{note.ai_summary}</p>
+        <div className="mt-3 p-3 rounded-lg text-sm" style={{ background: 'var(--accent-muted)' }}>
+          <strong className="text-xs" style={{ color: 'var(--accent)' }}>AI Summary</strong>
+          <p className="mt-1">{note.ai_summary}</p>
+        </div>
+      )}
+
+      {note.ai_deal_signals && note.ai_deal_signals.length > 0 && (
+        <div className="mt-3">
+          <strong className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Deal Signals</strong>
+          <div className="mt-1 space-y-1">
+            {note.ai_deal_signals.map((signal, i) => (
+              <div key={i} className="flex items-start gap-2 text-sm p-1.5 rounded" style={{ background: 'var(--background)' }}>
+                <span className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ background: sentimentColors[signal.sentiment] }} />
+                <div>
+                  <span className="font-medium">{signal.signal}</span>
+                  {signal.detail && <span className="text-xs ml-1" style={{ color: 'var(--muted)' }}>— {signal.detail}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {note.ai_action_items && note.ai_action_items.length > 0 && (
-        <div className="mt-2">
-          <strong className="text-xs" style={{ color: 'var(--warning)' }}>Action Items:</strong>
+        <div className="mt-3">
+          <strong className="text-xs" style={{ color: 'var(--warning)' }}>Action Items</strong>
           <ul className="mt-1 space-y-1">
             {note.ai_action_items.map((item, i) => (
-              <li key={i} className="text-sm flex items-start gap-2">
+              <li key={i} className="text-sm flex items-start gap-2 p-1.5 rounded" style={{ background: 'var(--background)' }}>
                 <input type="checkbox" checked={item.completed} readOnly className="mt-0.5" />
-                <span>{item.text}</span>
+                <span className="flex-1">{item.text}</span>
+                {item.assignee && <span className="text-xs" style={{ color: 'var(--muted)' }}>{item.assignee}</span>}
+                {item.due_date && <span className="text-xs" style={{ color: 'var(--accent)' }}>{item.due_date}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {note.ai_key_insights && note.ai_key_insights.length > 0 && (
+        <div className="mt-3">
+          <strong className="text-xs" style={{ color: 'var(--accent)' }}>Key Insights</strong>
+          <ul className="mt-1 space-y-1">
+            {note.ai_key_insights.map((insight, i) => (
+              <li key={i} className="text-sm flex items-start gap-2">
+                <span style={{ color: 'var(--accent)' }}>•</span>
+                <span>{insight}</span>
               </li>
             ))}
           </ul>
