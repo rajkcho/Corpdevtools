@@ -11,6 +11,8 @@ import type {
   DealStage, DealScore, DDStatus, RAGStatus,
 } from './types';
 import { SCORE_CRITERIA, DD_WORKSTREAMS } from './types';
+import { DD_TASK_TEMPLATES } from './dd-templates';
+import type { TaskTemplate } from './dd-templates';
 
 // --- Helpers ---
 
@@ -560,6 +562,42 @@ export function updateApprovalGate(id: string, data: Partial<ApprovalGate>): voi
   if (idx !== -1) {
     gates[idx] = { ...gates[idx], ...data };
     setStore('approval_gates', gates);
+  }
+}
+
+// --- Populate DD Templates ---
+
+export function populateDDTemplates(projectId: string): void {
+  const workstreams = getDDWorkstreams(projectId);
+  for (const ws of workstreams) {
+    const templates = DD_TASK_TEMPLATES[ws.key];
+    if (!templates) continue;
+
+    let sortOrder = 0;
+    for (const group of templates) {
+      // Create parent task (group header)
+      const parentTask = createDDTask({
+        workstream_id: ws.id,
+        title: group.title,
+        priority: group.priority,
+        description: group.description,
+        sort_order: sortOrder++,
+      });
+
+      // Create child tasks
+      if (group.children) {
+        for (const child of group.children) {
+          createDDTask({
+            workstream_id: ws.id,
+            parent_task_id: parentTask.id,
+            title: child.title,
+            priority: child.priority,
+            description: child.description,
+            sort_order: sortOrder++,
+          });
+        }
+      }
+    }
   }
 }
 

@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { FileSearch, Plus } from 'lucide-react';
 import Link from 'next/link';
-import { getDDProjects, getTargets, createDDProject } from '@/lib/db';
+import { getDDProjects, getTargets, createDDProject, populateDDTemplates } from '@/lib/db';
+import { countTemplateTasks } from '@/lib/dd-templates';
 import type { DDProject, Target } from '@/lib/types';
 import RAGDot from '@/components/RAGDot';
 import ProgressBar from '@/components/ProgressBar';
@@ -26,10 +27,15 @@ export default function DiligencePage() {
     !['identified', 'closed_won', 'closed_lost'].includes(t.stage)
   );
 
+  const [useTemplates, setUseTemplates] = useState(true);
+
   const handleCreate = (targetId: string) => {
     const target = targets.find(t => t.id === targetId);
     if (!target) return;
     const project = createDDProject({ target_id: targetId, target_name: target.name });
+    if (useTemplates) {
+      populateDDTemplates(project.id);
+    }
     setShowCreate(false);
     reload();
   };
@@ -79,10 +85,31 @@ export default function DiligencePage() {
       )}
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Start Due Diligence">
-        <div className="space-y-3">
+        <div className="space-y-4">
           <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
             Select a target from your pipeline to begin due diligence:
           </p>
+
+          {/* Template toggle */}
+          <div className="p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useTemplates}
+                onChange={e => setUseTemplates(e.target.checked)}
+                className="mt-1"
+              />
+              <div>
+                <div className="text-sm font-medium">Pre-populate with CSU/Harris DD templates</div>
+                <div className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
+                  {countTemplateTasks()} tasks across 8 workstreams based on Constellation Software&apos;s
+                  due diligence methodology. Includes customer reference calls, financial normalization,
+                  operating ratio benchmarks, red flag checklists, and more.
+                </div>
+              </div>
+            </label>
+          </div>
+
           {eligibleTargets.length === 0 ? (
             <p className="text-sm p-4 rounded text-center" style={{ background: 'var(--background)', color: 'var(--muted)' }}>
               No eligible targets. Add targets to your pipeline first.

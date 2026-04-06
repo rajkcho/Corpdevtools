@@ -13,7 +13,7 @@ import {
   getTouchpoints, createTouchpoint, deleteTouchpoint,
   getMeetingNotes, createMeetingNote, deleteMeetingNote,
   getContacts, createContact, deleteContact,
-  getDDProjectByTarget, createDDProject,
+  getDDProjectByTarget, createDDProject, populateDDTemplates,
 } from '@/lib/db';
 import { DEAL_STAGES, SCORE_CRITERIA } from '@/lib/types';
 import type { Target, Touchpoint, MeetingNote, Contact, DealScore } from '@/lib/types';
@@ -72,6 +72,7 @@ export default function TargetDetailPage() {
 
   const handleStartDD = () => {
     const project = createDDProject({ target_id: id, target_name: target.name });
+    populateDDTemplates(project.id);
     router.push(`/diligence/${project.id}`);
   };
 
