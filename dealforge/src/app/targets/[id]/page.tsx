@@ -6,6 +6,7 @@ import {
   ArrowLeft, Edit2, Trash2, Plus, Phone, Mail, Video,
   MessageSquare, Calendar, Upload, FileText, Link2,
   Users, ExternalLink, MapPin, Building2, ChevronDown, ChevronUp,
+  Download, Import,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -16,11 +17,13 @@ import {
   getDDProjectByTarget, createDDProject, populateDDTemplates,
   getDealTerms, createDealTerm, updateDealTerm, deleteDealTerm,
   getActivitiesForTarget, logActivity,
+  exportContactsCSV, importContactsFromCSV,
 } from '@/lib/db';
 import { DEAL_STAGES, SCORE_CRITERIA } from '@/lib/types';
 import type { Target, Touchpoint, MeetingNote, Contact, DealScore, DealTerm, ActivityEntry } from '@/lib/types';
 import Modal from '@/components/Modal';
 import TargetForm from '@/components/TargetForm';
+import RadarChart from '@/components/RadarChart';
 
 const TOUCHPOINT_ICONS: Record<string, React.ReactNode> = {
   email: <Mail size={14} />,
@@ -247,9 +250,49 @@ export default function TargetDetailPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Key Contacts</h2>
-            <button onClick={() => setShowContactModal(true)} className="btn btn-primary btn-sm">
-              <Plus size={14} /> Add Contact
-            </button>
+            <div className="flex gap-2">
+              <label className="btn btn-secondary btn-sm cursor-pointer">
+                <Upload size={14} /> Import CSV
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = ev => {
+                      const csv = ev.target?.result as string;
+                      const count = importContactsFromCSV(csv, id);
+                      alert(`Imported ${count} contacts`);
+                      reload();
+                    };
+                    reader.readAsText(file);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+              {contacts.length > 0 && (
+                <button
+                  onClick={() => {
+                    const csv = exportContactsCSV();
+                    const blob = new Blob([csv], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `contacts-${target.name.replace(/\s+/g, '-').toLowerCase()}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="btn btn-secondary btn-sm"
+                >
+                  <Download size={14} /> Export
+                </button>
+              )}
+              <button onClick={() => setShowContactModal(true)} className="btn btn-primary btn-sm">
+                <Plus size={14} /> Add Contact
+              </button>
+            </div>
           </div>
           {target.founder_name && (
             <div className="glass-card p-4">
@@ -303,6 +346,14 @@ export default function TargetDetailPage() {
       {activeTab === 'scoring' && (
         <div className="glass-card p-5">
           <h2 className="font-semibold mb-4">VMS Acquisition Scorecard</h2>
+
+          {/* Radar Chart */}
+          {target.score && (
+            <div className="flex justify-center mb-6">
+              <RadarChart score={target.score} size={280} />
+            </div>
+          )}
+
           <div className="grid gap-4">
             {SCORE_CRITERIA.map(c => {
               const val = target.score?.[c.key] || 0;

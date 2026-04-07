@@ -12,6 +12,8 @@ import {
   ChevronRight,
   BarChart3,
   ArrowUpDown,
+  Clock,
+  Search,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -22,6 +24,7 @@ const NAV_ITEMS = [
   { href: '/compare', label: 'Compare', icon: ArrowUpDown },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/diligence', label: 'Due Diligence', icon: FileSearch },
+  { href: '/activity', label: 'Activity', icon: Clock },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -73,6 +76,21 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Quick search hint */}
+      {!collapsed && (
+        <div className="px-3 pb-2">
+          <button
+            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
+            className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors"
+            style={{ background: 'var(--background)', color: 'var(--muted)' }}
+          >
+            <Search size={12} />
+            <span className="flex-1 text-left">Search...</span>
+            <kbd className="px-1 py-0.5 rounded text-xs" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>⌘K</kbd>
+          </button>
+        </div>
+      )}
 
       {/* Collapse toggle */}
       <button

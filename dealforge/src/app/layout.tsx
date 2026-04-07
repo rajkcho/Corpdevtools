@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
+import CommandPalette from "@/components/CommandPalette";
 
 export const metadata: Metadata = {
   title: "DealForge - M&A Intelligence Platform",
@@ -19,6 +20,7 @@ export default function RootLayout({
         <main className="flex-1 overflow-auto">
           {children}
         </main>
+        <CommandPalette />
       </body>
     </html>
   );
