@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, List, KanbanSquare, GripVertical, CheckSquare, Square, Trash2, ArrowRight, ChevronRight, ChevronLeft, X, MoreVertical, XCircle, Star, Eye, Calendar } from 'lucide-react';
+import { Plus, List, KanbanSquare, GripVertical, CheckSquare, Square, Trash2, ArrowRight, ChevronRight, ChevronLeft, X, MoreVertical, XCircle, Star, Eye, Calendar, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { getTargets, createTarget, updateTarget, deleteTarget } from '@/lib/db';
 import { DEAL_STAGES } from '@/lib/types';
@@ -11,7 +11,7 @@ import TargetForm from '@/components/TargetForm';
 
 export default function PipelinePage() {
   const [targets, setTargets] = useState<Target[]>([]);
-  const [view, setView] = useState<'kanban' | 'list' | 'timeline'>('kanban');
+  const [view, setView] = useState<'kanban' | 'list' | 'timeline' | 'forecast'>('kanban');
   const [showAddModal, setShowAddModal] = useState(false);
   const [dragTarget, setDragTarget] = useState<string | null>(null);
   const [filterVertical, setFilterVertical] = useState<string>('all');
@@ -168,6 +168,13 @@ export default function PipelinePage() {
               style={{ background: view === 'timeline' ? 'var(--accent)' : 'var(--card)', color: view === 'timeline' ? 'white' : 'var(--muted-foreground)' }}
             >
               <Calendar size={14} />
+            </button>
+            <button
+              onClick={() => setView('forecast')}
+              className="btn btn-sm"
+              style={{ background: view === 'forecast' ? 'var(--accent)' : 'var(--card)', color: view === 'forecast' ? 'white' : 'var(--muted-foreground)' }}
+            >
+              <TrendingUp size={14} />
             </button>
           </div>
           <button onClick={() => setShowAddModal(true)} className="btn btn-primary btn-sm">
@@ -565,6 +572,251 @@ export default function PipelinePage() {
                 </div>
               ))}
               <span className="text-[10px] ml-auto" style={{ color: 'var(--muted)' }}>⚠ = stale ({'>'}30d in stage)</span>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Forecast View */}
+      {view === 'forecast' && (() => {
+        // Stage win probabilities (VMS M&A typical)
+        const STAGE_PROBABILITY: Record<string, number> = {
+          identified: 0.05, researching: 0.10, contacted: 0.15,
+          nurturing: 0.25, loi_submitted: 0.50, loi_signed: 0.70,
+          due_diligence: 0.80, closing: 0.90, closed_won: 1.0, closed_lost: 0,
+        };
+
+        const activeDeals = filteredTargets.filter(t => !['closed_won', 'closed_lost'].includes(t.stage));
+        const fmt = (n: number) => n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `$${(n / 1_000).toFixed(0)}K` : `$${n}`;
+
+        const totalPipeline = activeDeals.reduce((s, t) => s + (t.asking_price || t.revenue ? (t.asking_price || (t.arr || t.revenue || 0) * 4) : 0), 0);
+        const weightedPipeline = activeDeals.reduce((s, t) => {
+          const ev = t.asking_price || (t.arr || t.revenue || 0) * 4;
+          return s + ev * (STAGE_PROBABILITY[t.stage] || 0);
+        }, 0);
+        const avgProbability = activeDeals.length > 0
+          ? activeDeals.reduce((s, t) => s + (STAGE_PROBABILITY[t.stage] || 0), 0) / activeDeals.length
+          : 0;
+
+        // Group by stage for funnel
+        const stageData = DEAL_STAGES
+          .filter(s => !['closed_won', 'closed_lost'].includes(s.key))
+          .map(s => {
+            const deals = activeDeals.filter(t => t.stage === s.key);
+            const totalEV = deals.reduce((sum, t) => sum + (t.asking_price || (t.arr || t.revenue || 0) * 4), 0);
+            const weightedEV = totalEV * (STAGE_PROBABILITY[s.key] || 0);
+            return { ...s, deals, totalEV, weightedEV, probability: STAGE_PROBABILITY[s.key] || 0 };
+          });
+
+        const maxStageEV = Math.max(...stageData.map(s => s.totalEV), 1);
+
+        // Quarterly forecast — estimate when deals might close based on stage
+        const monthsToClose: Record<string, number> = {
+          identified: 12, researching: 10, contacted: 8, nurturing: 6,
+          loi_submitted: 4, loi_signed: 3, due_diligence: 2, closing: 1,
+        };
+        const quarters: { label: string; totalEV: number; weightedEV: number; deals: typeof activeDeals }[] = [];
+        const now = new Date();
+        for (let q = 0; q < 4; q++) {
+          const qStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3 + q * 3, 1);
+          const qEnd = new Date(qStart.getFullYear(), qStart.getMonth() + 3, 0);
+          const qLabel = `Q${Math.floor(qStart.getMonth() / 3) + 1} ${qStart.getFullYear()}`;
+          const qDeals = activeDeals.filter(t => {
+            const estClose = new Date(now);
+            estClose.setMonth(estClose.getMonth() + (monthsToClose[t.stage] || 6));
+            return estClose >= qStart && estClose <= qEnd;
+          });
+          const totalEV = qDeals.reduce((s, t) => s + (t.asking_price || (t.arr || t.revenue || 0) * 4), 0);
+          const weightedEV = qDeals.reduce((s, t) => {
+            const ev = t.asking_price || (t.arr || t.revenue || 0) * 4;
+            return s + ev * (STAGE_PROBABILITY[t.stage] || 0);
+          }, 0);
+          quarters.push({ label: qLabel, totalEV, weightedEV, deals: qDeals });
+        }
+        const maxQEV = Math.max(...quarters.map(q => q.totalEV), 1);
+
+        return (
+          <div className="flex-1 overflow-y-auto space-y-4">
+            {/* KPIs */}
+            <div className="grid grid-cols-4 gap-4">
+              {[
+                { label: 'Total Pipeline', value: fmt(totalPipeline), sub: `${activeDeals.length} active deals` },
+                { label: 'Weighted Pipeline', value: fmt(weightedPipeline), sub: 'probability-adjusted' },
+                { label: 'Avg Win Probability', value: `${(avgProbability * 100).toFixed(0)}%`, sub: 'across active deals' },
+                { label: 'Expected Closes (12mo)', value: activeDeals.filter(t => (monthsToClose[t.stage] || 12) <= 12).length.toString(), sub: 'based on stage velocity' },
+              ].map(kpi => (
+                <div key={kpi.label} className="glass-card p-4">
+                  <div className="text-xs" style={{ color: 'var(--muted)' }}>{kpi.label}</div>
+                  <div className="text-2xl font-bold mt-1">{kpi.value}</div>
+                  <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{kpi.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Pipeline funnel by stage */}
+            <div className="glass-card p-5">
+              <h3 className="font-semibold text-sm mb-4">Pipeline Funnel — Weighted by Win Probability</h3>
+              <div className="space-y-3">
+                {stageData.map(s => (
+                  <div key={s.key} className="flex items-center gap-3">
+                    <div className="w-28 text-right">
+                      <div className="text-xs font-medium">{s.label}</div>
+                      <div className="text-xs" style={{ color: 'var(--muted)' }}>{(s.probability * 100).toFixed(0)}% prob</div>
+                    </div>
+                    <div className="flex-1">
+                      <div className="relative h-8 rounded-lg overflow-hidden" style={{ background: 'var(--background)' }}>
+                        {/* Total EV bar */}
+                        <div
+                          className="absolute inset-y-0 left-0 rounded-lg transition-all"
+                          style={{ width: `${(s.totalEV / maxStageEV) * 100}%`, background: `${s.color}33` }}
+                        />
+                        {/* Weighted EV bar */}
+                        <div
+                          className="absolute inset-y-0 left-0 rounded-lg transition-all flex items-center px-2"
+                          style={{ width: `${(s.weightedEV / maxStageEV) * 100}%`, background: `${s.color}88` }}
+                        >
+                          {s.weightedEV > 0 && (
+                            <span className="text-xs font-bold text-white whitespace-nowrap">
+                              {fmt(s.weightedEV)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="w-20 text-right">
+                      <div className="text-xs font-medium">{s.deals.length} deal{s.deals.length !== 1 ? 's' : ''}</div>
+                      <div className="text-xs" style={{ color: 'var(--muted)' }}>{s.totalEV > 0 ? fmt(s.totalEV) : '—'}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between mt-4 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--muted)' }}>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'var(--accent)', opacity: 0.3 }} /> Total EV</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'var(--accent)', opacity: 0.7 }} /> Weighted EV</span>
+                </div>
+                <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                  EV estimated at asking price or 4x ARR/Revenue
+                </span>
+              </div>
+            </div>
+
+            {/* Quarterly forecast */}
+            <div className="glass-card p-5">
+              <h3 className="font-semibold text-sm mb-4">Quarterly Close Forecast</h3>
+              <div className="grid grid-cols-4 gap-4">
+                {quarters.map((q, qi) => (
+                  <div key={q.label} className="rounded-xl p-4 border" style={{ borderColor: 'var(--border)', background: qi === 0 ? 'var(--accent-muted)' : 'var(--background)' }}>
+                    <div className="text-xs font-medium" style={{ color: qi === 0 ? 'var(--accent)' : 'var(--muted)' }}>
+                      {q.label} {qi === 0 && '(Current)'}
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-lg font-bold">{q.totalEV > 0 ? fmt(q.totalEV) : '—'}</div>
+                      <div className="text-xs" style={{ color: 'var(--muted)' }}>
+                        {q.weightedEV > 0 ? `${fmt(q.weightedEV)} weighted` : 'no projected closes'}
+                      </div>
+                    </div>
+                    <div className="mt-3 h-2 rounded-full overflow-hidden" style={{ background: 'var(--card)' }}>
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${(q.totalEV / maxQEV) * 100}%`, background: qi === 0 ? 'var(--accent)' : 'var(--muted)' }}
+                      />
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {q.deals.slice(0, 3).map(d => (
+                        <Link
+                          key={d.id}
+                          href={`/targets/${d.id}`}
+                          className="flex items-center justify-between text-xs py-0.5 hover:underline"
+                        >
+                          <span className="truncate">{d.name}</span>
+                          <span style={{ color: 'var(--muted)' }}>{(STAGE_PROBABILITY[d.stage] * 100).toFixed(0)}%</span>
+                        </Link>
+                      ))}
+                      {q.deals.length > 3 && (
+                        <div className="text-xs" style={{ color: 'var(--muted)' }}>+{q.deals.length - 3} more</div>
+                      )}
+                      {q.deals.length === 0 && (
+                        <div className="text-xs" style={{ color: 'var(--muted)' }}>No projected closes</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Deal-level detail */}
+            <div className="glass-card p-5">
+              <h3 className="font-semibold text-sm mb-4">Deal-Level Forecast Detail</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <th className="text-left p-2 text-xs font-medium" style={{ color: 'var(--muted)' }}>Target</th>
+                      <th className="text-left p-2 text-xs font-medium" style={{ color: 'var(--muted)' }}>Stage</th>
+                      <th className="text-right p-2 text-xs font-medium" style={{ color: 'var(--muted)' }}>Est. EV</th>
+                      <th className="text-center p-2 text-xs font-medium" style={{ color: 'var(--muted)' }}>Win Prob</th>
+                      <th className="text-right p-2 text-xs font-medium" style={{ color: 'var(--muted)' }}>Weighted EV</th>
+                      <th className="text-center p-2 text-xs font-medium" style={{ color: 'var(--muted)' }}>Est. Close</th>
+                      <th className="text-center p-2 text-xs font-medium" style={{ color: 'var(--muted)' }}>Days in Stage</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeDeals
+                      .sort((a, b) => (STAGE_PROBABILITY[b.stage] || 0) - (STAGE_PROBABILITY[a.stage] || 0))
+                      .map(d => {
+                        const ev = d.asking_price || (d.arr || d.revenue || 0) * 4;
+                        const prob = STAGE_PROBABILITY[d.stage] || 0;
+                        const estClose = new Date();
+                        estClose.setMonth(estClose.getMonth() + (monthsToClose[d.stage] || 6));
+                        const daysIn = daysSinceStageEntry(d.stage_entered_at);
+                        const stageInfo = DEAL_STAGES.find(s => s.key === d.stage);
+                        return (
+                          <tr key={d.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                            <td className="p-2">
+                              <Link href={`/targets/${d.id}`} className="font-medium hover:underline">{d.name}</Link>
+                              <div className="text-xs" style={{ color: 'var(--muted)' }}>{d.vertical}</div>
+                            </td>
+                            <td className="p-2">
+                              <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: `${stageInfo?.color}22`, color: stageInfo?.color }}>
+                                {stageInfo?.label}
+                              </span>
+                            </td>
+                            <td className="p-2 text-right font-mono">{ev > 0 ? fmt(ev) : '—'}</td>
+                            <td className="p-2 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <div className="w-12 h-2 rounded-full overflow-hidden" style={{ background: 'var(--background)' }}>
+                                  <div className="h-full rounded-full" style={{ width: `${prob * 100}%`, background: prob >= 0.5 ? 'var(--success)' : prob >= 0.2 ? 'var(--warning)' : 'var(--muted)' }} />
+                                </div>
+                                <span className="text-xs font-mono">{(prob * 100).toFixed(0)}%</span>
+                              </div>
+                            </td>
+                            <td className="p-2 text-right font-mono font-medium" style={{ color: 'var(--accent)' }}>
+                              {ev > 0 ? fmt(ev * prob) : '—'}
+                            </td>
+                            <td className="p-2 text-center text-xs" style={{ color: 'var(--muted)' }}>
+                              {estClose.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                            </td>
+                            <td className="p-2 text-center">
+                              <span className="text-xs font-mono" style={{ color: daysIn > 30 ? 'var(--warning)' : 'var(--muted)' }}>
+                                {daysIn}d
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid var(--border)' }}>
+                      <td className="p-2 font-semibold" colSpan={2}>Total</td>
+                      <td className="p-2 text-right font-mono font-bold">{fmt(totalPipeline)}</td>
+                      <td className="p-2 text-center text-xs" style={{ color: 'var(--muted)' }}>{(avgProbability * 100).toFixed(0)}% avg</td>
+                      <td className="p-2 text-right font-mono font-bold" style={{ color: 'var(--accent)' }}>{fmt(weightedPipeline)}</td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           </div>
         );
