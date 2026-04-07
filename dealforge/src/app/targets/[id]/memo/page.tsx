@@ -258,6 +258,122 @@ export default function MemoPage() {
           </section>
         )}
 
+        {/* SWOT Analysis */}
+        {(() => {
+          const swotRaw = typeof window !== 'undefined' ? localStorage.getItem(`dealforge_swot_${id}`) : null;
+          const swot = swotRaw ? JSON.parse(swotRaw) : null;
+          if (!swot || (!swot.strengths?.length && !swot.weaknesses?.length && !swot.opportunities?.length && !swot.threats?.length)) return null;
+          return (
+            <section className="mb-8">
+              <h2 className="text-lg font-bold mb-3 pb-1" style={{ borderBottom: '1px solid var(--border)' }}>SWOT Analysis</h2>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { title: 'Strengths', items: swot.strengths || [], color: 'var(--success)' },
+                  { title: 'Weaknesses', items: swot.weaknesses || [], color: 'var(--danger)' },
+                  { title: 'Opportunities', items: swot.opportunities || [], color: 'var(--accent)' },
+                  { title: 'Threats', items: swot.threats || [], color: 'var(--warning)' },
+                ].map(q => (
+                  <div key={q.title} className="p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+                    <h4 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: q.color }}>{q.title}</h4>
+                    {q.items.length > 0 ? (
+                      <ul className="text-xs space-y-1">
+                        {q.items.map((item: string, i: number) => <li key={i}>• {item}</li>)}
+                      </ul>
+                    ) : (
+                      <p className="text-xs" style={{ color: 'var(--muted)' }}>None identified</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* Competitor Landscape */}
+        {(() => {
+          const compRaw = typeof window !== 'undefined' ? localStorage.getItem(`dealforge_competitors_${id}`) : null;
+          const competitors = compRaw ? JSON.parse(compRaw) : [];
+          if (!competitors || competitors.length === 0) return null;
+          return (
+            <section className="mb-8">
+              <h2 className="text-lg font-bold mb-3 pb-1" style={{ borderBottom: '1px solid var(--border)' }}>Competitive Landscape</h2>
+              <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <th className="text-left p-1.5 text-xs" style={{ color: 'var(--muted-foreground)' }}>Competitor</th>
+                    <th className="text-left p-1.5 text-xs" style={{ color: 'var(--muted-foreground)' }}>Strengths</th>
+                    <th className="text-left p-1.5 text-xs" style={{ color: 'var(--muted-foreground)' }}>Weaknesses</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {competitors.map((c: { name: string; strengths?: string; weaknesses?: string }, i: number) => (
+                    <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td className="p-1.5 font-medium">{c.name}</td>
+                      <td className="p-1.5 text-xs" style={{ color: 'var(--muted-foreground)' }}>{c.strengths || '—'}</td>
+                      <td className="p-1.5 text-xs" style={{ color: 'var(--muted-foreground)' }}>{c.weaknesses || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          );
+        })()}
+
+        {/* Financial Analysis */}
+        {target.asking_price && target.revenue && (
+          <section className="mb-8">
+            <h2 className="text-lg font-bold mb-3 pb-1" style={{ borderBottom: '1px solid var(--border)' }}>Financial Analysis</h2>
+            <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  <th className="text-left p-1.5 text-xs" style={{ color: 'var(--muted-foreground)' }}>Metric</th>
+                  <th className="text-right p-1.5 text-xs" style={{ color: 'var(--muted-foreground)' }}>Value</th>
+                  <th className="text-right p-1.5 text-xs" style={{ color: 'var(--muted-foreground)' }}>Multiple</th>
+                  <th className="text-right p-1.5 text-xs" style={{ color: 'var(--muted-foreground)' }}>VMS Benchmark</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td className="p-1.5">Revenue</td>
+                  <td className="p-1.5 text-right font-mono">{fmt(target.revenue)}</td>
+                  <td className="p-1.5 text-right font-mono font-bold">{(target.asking_price / target.revenue).toFixed(1)}x</td>
+                  <td className="p-1.5 text-right font-mono" style={{ color: 'var(--muted)' }}>2.0-4.0x</td>
+                </tr>
+                {target.arr && (
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td className="p-1.5">ARR</td>
+                    <td className="p-1.5 text-right font-mono">{fmt(target.arr)}</td>
+                    <td className="p-1.5 text-right font-mono font-bold">{(target.asking_price / target.arr).toFixed(1)}x</td>
+                    <td className="p-1.5 text-right font-mono" style={{ color: 'var(--muted)' }}>3.0-6.0x</td>
+                  </tr>
+                )}
+                {target.ebita && target.ebita > 0 && (
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td className="p-1.5">EBITA</td>
+                    <td className="p-1.5 text-right font-mono">{fmt(target.ebita)}</td>
+                    <td className="p-1.5 text-right font-mono font-bold">{(target.asking_price / target.ebita).toFixed(1)}x</td>
+                    <td className="p-1.5 text-right font-mono" style={{ color: 'var(--muted)' }}>8.0-15.0x</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            {target.revenue && target.yoy_growth_pct && (
+              <div className="mt-3 text-xs p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+                <span className="font-medium">Rule of 40 Check: </span>
+                {(() => {
+                  const r40 = (target.yoy_growth_pct || 0) + (target.ebita_margin_pct || 0);
+                  return (
+                    <span style={{ color: r40 >= 40 ? 'var(--success)' : r40 >= 25 ? 'var(--warning)' : 'var(--danger)' }}>
+                      {target.yoy_growth_pct}% growth + {target.ebita_margin_pct || 0}% margin = <span className="font-bold">{r40}%</span>
+                      {r40 >= 40 ? ' ✓ Passes' : ' — Below threshold'}
+                    </span>
+                  );
+                })()}
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Relationship History */}
         {touchpoints.length > 0 && (
           <section className="mb-8">

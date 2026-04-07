@@ -1353,6 +1353,160 @@ export default function AnalyticsPage() {
           </div>
         );
       })()}
+
+      {/* Win/Loss Analysis */}
+      {(() => {
+        const closed = targets.filter(t => ['closed_won', 'closed_lost'].includes(t.stage));
+        if (closed.length < 1) return null;
+
+        const winRate = closed.length > 0 ? Math.round((won.length / closed.length) * 100) : 0;
+        const avgWonValue = won.length > 0 ? won.reduce((s, t) => s + (t.asking_price || 0), 0) / won.length : 0;
+        const avgLostValue = lost.length > 0 ? lost.reduce((s, t) => s + (t.asking_price || 0), 0) / lost.length : 0;
+        const avgDaysToClose = won.length > 0 ? Math.round(won.reduce((s, t) => {
+          return s + (new Date(t.updated_at).getTime() - new Date(t.created_at).getTime()) / 86400000;
+        }, 0) / won.length) : 0;
+
+        // By source
+        const sources = ['proprietary', 'broker', 'inbound', 'referral', 'other'] as const;
+        const bySource = sources.map(src => {
+          const srcClosed = closed.filter(t => t.source === src);
+          const srcWon = won.filter(t => t.source === src);
+          return { source: src, total: srcClosed.length, won: srcWon.length, rate: srcClosed.length > 0 ? Math.round((srcWon.length / srcClosed.length) * 100) : 0 };
+        }).filter(s => s.total > 0);
+
+        // By vertical
+        const verticals = Array.from(new Set(closed.map(t => t.vertical)));
+        const byVertical = verticals.map(v => {
+          const vClosed = closed.filter(t => t.vertical === v);
+          const vWon = won.filter(t => t.vertical === v);
+          return { vertical: v, total: vClosed.length, won: vWon.length, rate: vClosed.length > 0 ? Math.round((vWon.length / vClosed.length) * 100) : 0 };
+        }).sort((a, b) => b.rate - a.rate);
+
+        // Characteristics comparison
+        const avgScore = (arr: typeof targets) => {
+          const scored = arr.filter(t => t.weighted_score);
+          return scored.length > 0 ? (scored.reduce((s, t) => s + (t.weighted_score || 0), 0) / scored.length).toFixed(1) : '—';
+        };
+        const avgRev = (arr: typeof targets) => {
+          const withRev = arr.filter(t => t.revenue);
+          return withRev.length > 0 ? fmt(withRev.reduce((s, t) => s + (t.revenue || 0), 0) / withRev.length) : '—';
+        };
+        const avgRecurring = (arr: typeof targets) => {
+          const withRR = arr.filter(t => t.recurring_revenue_pct);
+          return withRR.length > 0 ? `${Math.round(withRR.reduce((s, t) => s + (t.recurring_revenue_pct || 0), 0) / withRR.length)}%` : '—';
+        };
+
+        return (
+          <div className="glass-card p-5">
+            <h2 className="font-semibold mb-1 flex items-center gap-2">
+              <Activity size={16} style={{ color: 'var(--accent)' }} /> Win/Loss Analysis
+            </h2>
+            <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>Post-mortem analysis of closed deals</p>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-2xl font-bold font-mono" style={{ color: 'var(--success)' }}>{won.length}</div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>Deals Won</div>
+              </div>
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-2xl font-bold font-mono" style={{ color: 'var(--danger)' }}>{lost.length}</div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>Deals Lost</div>
+              </div>
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-2xl font-bold font-mono" style={{ color: winRate >= 25 ? 'var(--success)' : 'var(--warning)' }}>{winRate}%</div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>Win Rate</div>
+              </div>
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-2xl font-bold font-mono" style={{ color: 'var(--accent)' }}>{avgDaysToClose}d</div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>Avg Days to Close</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* By Source */}
+              {bySource.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>Win Rate by Source</h3>
+                  <div className="space-y-2">
+                    {bySource.map(s => (
+                      <div key={s.source} className="flex items-center gap-3">
+                        <span className="text-xs w-20 capitalize">{s.source}</span>
+                        <div className="flex-1 h-5 rounded overflow-hidden" style={{ background: 'var(--background)' }}>
+                          <div className="h-full rounded flex items-center px-2 text-[10px] font-bold text-white"
+                            style={{ width: `${Math.max(s.rate, 8)}%`, background: s.rate >= 30 ? 'var(--success)' : s.rate >= 15 ? 'var(--warning)' : 'var(--danger)' }}
+                          >
+                            {s.rate}%
+                          </div>
+                        </div>
+                        <span className="text-xs font-mono" style={{ color: 'var(--muted)' }}>{s.won}/{s.total}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* By Vertical */}
+              {byVertical.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>Win Rate by Vertical</h3>
+                  <div className="space-y-2">
+                    {byVertical.map(v => (
+                      <div key={v.vertical} className="flex items-center gap-3">
+                        <span className="text-xs w-24 truncate">{v.vertical}</span>
+                        <div className="flex-1 h-5 rounded overflow-hidden" style={{ background: 'var(--background)' }}>
+                          <div className="h-full rounded flex items-center px-2 text-[10px] font-bold text-white"
+                            style={{ width: `${Math.max(v.rate, 8)}%`, background: v.rate >= 30 ? 'var(--success)' : v.rate >= 15 ? 'var(--warning)' : 'var(--danger)' }}
+                          >
+                            {v.rate}%
+                          </div>
+                        </div>
+                        <span className="text-xs font-mono" style={{ color: 'var(--muted)' }}>{v.won}/{v.total}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Characteristics Comparison */}
+            <div className="mt-5">
+              <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>Won vs Lost: Key Characteristics</h3>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <th className="text-left p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Metric</th>
+                    <th className="text-center p-2 text-xs" style={{ color: 'var(--success)' }}>Won Avg</th>
+                    <th className="text-center p-2 text-xs" style={{ color: 'var(--danger)' }}>Lost Avg</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td className="p-2">Deal Score</td>
+                    <td className="p-2 text-center font-mono font-bold" style={{ color: 'var(--success)' }}>{avgScore(won)}</td>
+                    <td className="p-2 text-center font-mono" style={{ color: 'var(--danger)' }}>{avgScore(lost)}</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td className="p-2">Revenue</td>
+                    <td className="p-2 text-center font-mono font-bold" style={{ color: 'var(--success)' }}>{avgRev(won)}</td>
+                    <td className="p-2 text-center font-mono" style={{ color: 'var(--danger)' }}>{avgRev(lost)}</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td className="p-2">Recurring Revenue %</td>
+                    <td className="p-2 text-center font-mono font-bold" style={{ color: 'var(--success)' }}>{avgRecurring(won)}</td>
+                    <td className="p-2 text-center font-mono" style={{ color: 'var(--danger)' }}>{avgRecurring(lost)}</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td className="p-2">Avg Deal Value</td>
+                    <td className="p-2 text-center font-mono font-bold" style={{ color: 'var(--success)' }}>{avgWonValue > 0 ? fmt(avgWonValue) : '—'}</td>
+                    <td className="p-2 text-center font-mono" style={{ color: 'var(--danger)' }}>{avgLostValue > 0 ? fmt(avgLostValue) : '—'}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

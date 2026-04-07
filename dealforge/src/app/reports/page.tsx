@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { getTargets, getTouchpoints, getDDProjects, getActivities } from '@/lib/db';
 import { DEAL_STAGES } from '@/lib/types';
 import type { Target, Touchpoint, DDProject, ActivityEntry } from '@/lib/types';
-import { FileText, Printer, Calendar, TrendingUp, BarChart3, ArrowRight, Download, FileOutput } from 'lucide-react';
+import { FileText, Printer, Calendar, TrendingUp, BarChart3, ArrowRight, Download, FileOutput, Clock } from 'lucide-react';
 
 function fmt(n: number, prefix = '$'): string {
   if (n >= 1_000_000) return `${prefix}${(n / 1_000_000).toFixed(1)}M`;
@@ -179,6 +179,18 @@ export default function ReportsPage() {
           </select>
           <button onClick={handleExportReport} className="btn btn-secondary btn-sm">
             <Download size={14} /> Export
+          </button>
+          <button
+            onClick={async () => {
+              const { generateDealFlowReport } = await import('@/lib/deal-flow-report');
+              const periodMap: Record<string, '7d' | '30d' | '90d' | 'all'> = { qtd: '30d', ytd: '90d', '3m': '90d', '6m': '90d', '12m': 'all', all: 'all' };
+              const html = generateDealFlowReport(periodMap[period] || '30d');
+              const win = window.open('', '_blank');
+              if (win) { win.document.write(html); win.document.close(); }
+            }}
+            className="btn btn-primary btn-sm"
+          >
+            <FileOutput size={14} /> Deal Flow Report
           </button>
           <button
             onClick={async () => {
@@ -366,6 +378,105 @@ export default function ReportsPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Pipeline Aging Report */}
+      {active.length > 0 && (
+        <div className="glass-card p-5">
+          <h2 className="font-semibold mb-1 flex items-center gap-2">
+            <Clock size={16} style={{ color: 'var(--warning)' }} /> Pipeline Aging Report
+          </h2>
+          <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>Deals grouped by time in current stage</p>
+
+          {(() => {
+            const buckets = [
+              { label: '0-7 days', min: 0, max: 7, color: 'var(--success)' },
+              { label: '8-14 days', min: 8, max: 14, color: 'var(--success)' },
+              { label: '15-30 days', min: 15, max: 30, color: 'var(--accent)' },
+              { label: '31-60 days', min: 31, max: 60, color: 'var(--warning)' },
+              { label: '61-90 days', min: 61, max: 90, color: 'var(--warning)' },
+              { label: '90+ days', min: 91, max: 99999, color: 'var(--danger)' },
+            ];
+
+            const getAgingDays = (t: Target) => Math.floor((Date.now() - new Date(t.stage_entered_at).getTime()) / 86400000);
+
+            const bucketData = buckets.map(b => ({
+              ...b,
+              targets: active.filter(t => {
+                const days = getAgingDays(t);
+                return days >= b.min && days <= b.max;
+              }),
+            }));
+
+            const maxBucket = Math.max(...bucketData.map(b => b.targets.length), 1);
+            const avgAge = active.length > 0 ? Math.round(active.reduce((s, t) => s + getAgingDays(t), 0) / active.length) : 0;
+            const staleCount = active.filter(t => getAgingDays(t) > 30).length;
+
+            return (
+              <>
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                    <div className="text-lg font-bold font-mono">{avgAge}d</div>
+                    <div className="text-[10px]" style={{ color: 'var(--muted)' }}>Avg Age in Stage</div>
+                  </div>
+                  <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                    <div className="text-lg font-bold font-mono" style={{ color: staleCount > 0 ? 'var(--warning)' : 'var(--success)' }}>{staleCount}</div>
+                    <div className="text-[10px]" style={{ color: 'var(--muted)' }}>Stale (&gt;30d)</div>
+                  </div>
+                  <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                    <div className="text-lg font-bold font-mono">{active.length}</div>
+                    <div className="text-[10px]" style={{ color: 'var(--muted)' }}>Active Deals</div>
+                  </div>
+                </div>
+
+                {/* Aging Distribution */}
+                <div className="space-y-2 mb-4">
+                  {bucketData.map(b => (
+                    <div key={b.label} className="flex items-center gap-3">
+                      <span className="text-xs w-20" style={{ color: b.color }}>{b.label}</span>
+                      <div className="flex-1 h-6 rounded overflow-hidden" style={{ background: 'var(--background)' }}>
+                        <div className="h-full rounded flex items-center px-2 text-[10px] font-bold text-white transition-all"
+                          style={{ width: `${Math.max((b.targets.length / maxBucket) * 100, b.targets.length > 0 ? 10 : 0)}%`, background: b.color }}
+                        >
+                          {b.targets.length > 0 ? b.targets.length : ''}
+                        </div>
+                      </div>
+                      <span className="text-xs font-mono w-16 text-right" style={{ color: 'var(--muted)' }}>
+                        {b.targets.length > 0 ? fmt(b.targets.reduce((s, t) => s + (t.asking_price || 0), 0)) : '—'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Stale Deals Detail */}
+                {staleCount > 0 && (
+                  <div>
+                    <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--warning)' }}>Stale Deals Requiring Attention</h3>
+                    <div className="space-y-1.5">
+                      {active
+                        .filter(t => getAgingDays(t) > 30)
+                        .sort((a, b) => getAgingDays(b) - getAgingDays(a))
+                        .slice(0, 10)
+                        .map(t => {
+                          const days = getAgingDays(t);
+                          const stage = DEAL_STAGES.find(s => s.key === t.stage);
+                          return (
+                            <div key={t.id} className="flex items-center gap-3 p-2 rounded-lg text-sm" style={{ background: 'var(--background)' }}>
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: days > 60 ? 'var(--danger)' : 'var(--warning)' }} />
+                              <span className="font-medium flex-1 truncate">{t.name}</span>
+                              <span className="badge text-[9px]" style={{ background: `${stage?.color}20`, color: stage?.color }}>{stage?.label}</span>
+                              <span className="text-xs font-mono font-bold" style={{ color: days > 60 ? 'var(--danger)' : 'var(--warning)' }}>{days}d</span>
+                              {t.asking_price && <span className="text-xs font-mono" style={{ color: 'var(--muted)' }}>{fmt(t.asking_price)}</span>}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
     </div>
