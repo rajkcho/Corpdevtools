@@ -877,6 +877,20 @@ function FindingsPanel({ projectId, findings, workstreams, onReload }: { project
         <h2 className="font-semibold">Findings & Issues</h2>
         <button onClick={() => setShowAdd(true)} className="btn btn-primary btn-sm"><Plus size={14} /> Add Finding</button>
       </div>
+      {/* Summary bar */}
+      {findings.length > 0 && (
+        <div className="glass-card p-4 grid grid-cols-5 gap-4 text-center text-xs">
+          {(['critical', 'high', 'medium', 'low', 'info'] as const).map(sev => (
+            <div key={sev}>
+              <div className="text-lg font-bold" style={{ color: severityColors[sev] }}>
+                {findings.filter(f => f.severity === sev && f.status === 'open').length}
+              </div>
+              <div className="capitalize" style={{ color: 'var(--muted-foreground)' }}>{sev}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {findings.length === 0 ? (
         <div className="glass-card p-8 text-center" style={{ color: 'var(--muted)' }}>No findings recorded yet.</div>
       ) : (

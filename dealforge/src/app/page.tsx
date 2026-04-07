@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   Target, KanbanSquare, FileSearch, AlertTriangle, DollarSign,
-  Clock, TrendingUp, Calendar, BarChart3,
+  Clock, TrendingUp, Calendar, BarChart3, Plus, Mail, ArrowUpDown,
 } from 'lucide-react';
 import Link from 'next/link';
 import { getTargets, getDDProjects, getDDRisks, getTouchpoints, getDDFindings, getInfoRequests, getActivities } from '@/lib/db';
@@ -101,6 +101,16 @@ export default function DashboardPage() {
         <StatCard icon={<AlertTriangle size={18} />} label="Open Risks" value={openRisks.length} sub={criticalRisks.length > 0 ? `${criticalRisks.length} critical` : 'None critical'} color={criticalRisks.length > 0 ? 'var(--danger)' : 'var(--muted)'} />
         <StatCard icon={<TrendingUp size={18} />} label="Closed Won" value={closedWon.length} sub="Acquisitions" color="var(--success)" />
         <StatCard icon={<Clock size={18} />} label="Stale Deals" value={staleDeals.length} sub=">30 days in stage" color={staleDeals.length > 0 ? 'var(--warning)' : 'var(--muted)'} />
+      </div>
+
+      {/* Quick Actions */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs font-medium" style={{ color: 'var(--muted)' }}>Quick Actions:</span>
+        <Link href="/targets" className="btn btn-secondary btn-sm"><Plus size={12} /> New Target</Link>
+        <Link href="/pipeline" className="btn btn-secondary btn-sm"><KanbanSquare size={12} /> Pipeline</Link>
+        <Link href="/compare" className="btn btn-secondary btn-sm"><ArrowUpDown size={12} /> Compare</Link>
+        <Link href="/outreach" className="btn btn-secondary btn-sm"><Mail size={12} /> Outreach</Link>
+        <Link href="/analytics" className="btn btn-secondary btn-sm"><BarChart3 size={12} /> Analytics</Link>
       </div>
 
       {/* Main Grid */}
