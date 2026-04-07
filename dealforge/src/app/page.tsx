@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   Target, KanbanSquare, FileSearch, AlertTriangle, DollarSign,
-  Clock, TrendingUp, Calendar, BarChart3, Plus, Mail, ArrowUpDown, Users,
+  Clock, TrendingUp, Calendar, BarChart3, Plus, Mail, ArrowUpDown, Users, Star,
 } from 'lucide-react';
 import Link from 'next/link';
 import { getTargets, getDDProjects, getDDRisks, getTouchpoints, getDDFindings, getInfoRequests, getActivities, getContacts } from '@/lib/db';
@@ -134,6 +134,45 @@ export default function DashboardPage() {
         <Link href="/outreach" className="btn btn-secondary btn-sm"><Mail size={12} /> Outreach</Link>
         <Link href="/analytics" className="btn btn-secondary btn-sm"><BarChart3 size={12} /> Analytics</Link>
       </div>
+
+      {/* Watchlist */}
+      {(() => {
+        const watchlistRaw = typeof window !== 'undefined' ? localStorage.getItem('dealforge_watchlist') : null;
+        const watchlistIds: string[] = watchlistRaw ? JSON.parse(watchlistRaw) : [];
+        const watchlistTargets = targets.filter(t => watchlistIds.includes(t.id));
+        if (watchlistTargets.length === 0) return null;
+
+        return (
+          <div className="glass-card p-5">
+            <h2 className="font-semibold mb-3 flex items-center gap-2">
+              <Star size={16} style={{ color: '#F59E0B' }} /> Watchlist ({watchlistTargets.length})
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {watchlistTargets.map(t => {
+                const stage = DEAL_STAGES.find(s => s.key === t.stage);
+                const daysInStage = Math.floor((Date.now() - new Date(t.stage_entered_at).getTime()) / 86400000);
+                return (
+                  <Link key={t.id} href={`/targets/${t.id}`} className="flex items-center gap-3 p-3 rounded-lg transition-colors" style={{ background: 'var(--background)' }}>
+                    <Star size={14} fill="#F59E0B" style={{ color: '#F59E0B', flexShrink: 0 }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{t.name}</div>
+                      <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{t.vertical}</div>
+                    </div>
+                    <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                      <span className="badge text-[9px]" style={{ background: `${stage?.color}20`, color: stage?.color }}>{stage?.label}</span>
+                      {t.weighted_score && (
+                        <span className="text-[10px] font-mono" style={{
+                          color: t.weighted_score >= 4 ? 'var(--success)' : t.weighted_score >= 3 ? 'var(--warning)' : 'var(--danger)',
+                        }}>{t.weighted_score.toFixed(1)}</span>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

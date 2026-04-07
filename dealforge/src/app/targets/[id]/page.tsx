@@ -6,7 +6,7 @@ import {
   ArrowLeft, Edit2, Trash2, Plus, Phone, Mail, Video,
   MessageSquare, Calendar, Upload, FileText, Link2,
   Users, ExternalLink, MapPin, Building2, ChevronDown, ChevronUp,
-  Download, Import, Printer, FileOutput, Flag, CheckCircle2,
+  Download, Import, Printer, FileOutput, Flag, CheckCircle2, Star,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -97,7 +97,29 @@ export default function TargetDetailPage() {
             <ArrowLeft size={18} />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold">{target.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold">{target.name}</h1>
+              <button
+                onClick={() => {
+                  const raw = localStorage.getItem('dealforge_watchlist');
+                  const list: string[] = raw ? JSON.parse(raw) : [];
+                  if (list.includes(id)) {
+                    localStorage.setItem('dealforge_watchlist', JSON.stringify(list.filter(x => x !== id)));
+                  } else {
+                    localStorage.setItem('dealforge_watchlist', JSON.stringify([...list, id]));
+                  }
+                  reload();
+                }}
+                className="p-1 rounded hover:bg-opacity-50 transition-colors"
+                title={(() => { const raw = localStorage.getItem('dealforge_watchlist'); return (raw ? JSON.parse(raw) : []).includes(id) ? 'Remove from watchlist' : 'Add to watchlist'; })()}
+              >
+                <Star
+                  size={18}
+                  fill={(() => { const raw = localStorage.getItem('dealforge_watchlist'); return (raw ? JSON.parse(raw) : []).includes(id) ? '#F59E0B' : 'none'; })()}
+                  style={{ color: '#F59E0B' }}
+                />
+              </button>
+            </div>
             <div className="flex items-center gap-3 mt-1">
               <span className="badge" style={{ background: `${stageInfo?.color}20`, color: stageInfo?.color }}>
                 {stageInfo?.label}
