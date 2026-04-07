@@ -205,6 +205,18 @@ export default function ReportsPage() {
           >
             <FileOutput size={14} /> Executive Summary
           </button>
+          <button
+            onClick={async () => {
+              const { generateBoardDeck } = await import('@/lib/board-deck-generator');
+              const periodMap: Record<string, '30d' | '90d' | 'ytd' | 'all'> = { qtd: '30d', ytd: 'ytd', '3m': '90d', '6m': '90d', '12m': 'all', all: 'all' };
+              const html = generateBoardDeck({ period: periodMap[period] || '30d' });
+              const win = window.open('', '_blank');
+              if (win) { win.document.write(html); win.document.close(); }
+            }}
+            className="btn btn-primary btn-sm"
+          >
+            <FileOutput size={14} /> Board Deck
+          </button>
           <button onClick={() => window.print()} className="btn btn-secondary btn-sm">
             <Printer size={14} /> Print
           </button>

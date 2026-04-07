@@ -6,7 +6,7 @@ import { DEAL_STAGES, VERTICALS, SCORE_CRITERIA } from '@/lib/types';
 import type { Target, Touchpoint, DDProject, DealStage, DealScore } from '@/lib/types';
 import { getActivities } from '@/lib/db';
 import type { ActivityEntry } from '@/lib/types';
-import { TrendingUp, Clock, Users, DollarSign, Activity, BarChart3, ArrowRight, AlertTriangle, MapPin, Calendar, Grid } from 'lucide-react';
+import { TrendingUp, Clock, Users, DollarSign, Activity, BarChart3, ArrowRight, AlertTriangle, MapPin, Calendar, Grid, Shield } from 'lucide-react';
 import Link from 'next/link';
 
 function fmt(n: number, prefix = ''): string {
@@ -1646,6 +1646,342 @@ export default function AnalyticsPage() {
               })}
             </div>
           </div>
+        );
+      })()}
+
+      {/* ================================================================ */}
+      {/* Risk-Adjusted Returns Analysis                                    */}
+      {/* ================================================================ */}
+      {(() => {
+        if (active.length === 0) return null;
+
+        const STAGE_PROB: Record<DealStage, number> = {
+          identified: 0.05, researching: 0.10, contacted: 0.15, nurturing: 0.25,
+          loi_submitted: 0.40, loi_signed: 0.60, due_diligence: 0.75, closing: 0.90,
+          closed_won: 1.0, closed_lost: 0,
+        };
+
+        const INDUSTRY_MULTIPLE = 8;
+
+        // --- 1. Expected Value Calculator ---
+        const evData = active.map(t => {
+          const baseEV = t.asking_price || ((t.revenue || 0) * INDUSTRY_MULTIPLE);
+          const stageProb = STAGE_PROB[t.stage];
+          const scoreAdj = (t.weighted_score || 3.0) / 3.0;
+          const riskAdjustedValue = baseEV * stageProb * scoreAdj;
+          return {
+            id: t.id,
+            name: t.name,
+            vertical: t.vertical,
+            geography: t.geography,
+            stage: t.stage,
+            baseEV,
+            stageProb,
+            scoreAdj,
+            riskAdjustedValue,
+            weightedScore: t.weighted_score,
+          };
+        }).sort((a, b) => b.riskAdjustedValue - a.riskAdjustedValue);
+
+        const totalRAV = evData.reduce((s, d) => s + d.riskAdjustedValue, 0);
+        const totalBaseEV = evData.reduce((s, d) => s + d.baseEV, 0);
+
+        // --- 2. Portfolio Concentration Risk ---
+        // Vertical HHI
+        const verticalCounts: Record<string, number> = {};
+        for (const t of active) {
+          verticalCounts[t.vertical] = (verticalCounts[t.vertical] || 0) + 1;
+        }
+        const verticalHHI = Object.values(verticalCounts).reduce((sum, c) => {
+          const share = c / active.length;
+          return sum + share * share;
+        }, 0);
+
+        // Geographic HHI
+        const geoCounts: Record<string, number> = {};
+        for (const t of active) {
+          const geo = t.geography || 'Unknown';
+          geoCounts[geo] = (geoCounts[geo] || 0) + 1;
+        }
+        const geoHHI = Object.values(geoCounts).reduce((sum, c) => {
+          const share = c / active.length;
+          return sum + share * share;
+        }, 0);
+
+        // Size concentration
+        const sizeBuckets = { small: 0, mid: 0, large: 0 };
+        for (const d of evData) {
+          if (d.baseEV < 5_000_000) sizeBuckets.small++;
+          else if (d.baseEV < 25_000_000) sizeBuckets.mid++;
+          else sizeBuckets.large++;
+        }
+        const sizeHHI = Object.values(sizeBuckets).reduce((sum, c) => {
+          const share = active.length > 0 ? c / active.length : 0;
+          return sum + share * share;
+        }, 0);
+
+        const hhiLabel = (hhi: number) =>
+          hhi < 0.15 ? 'Diversified' : hhi <= 0.25 ? 'Moderate' : 'Concentrated';
+        const hhiColor = (hhi: number) =>
+          hhi < 0.15 ? 'var(--success)' : hhi <= 0.25 ? 'var(--warning)' : 'var(--danger)';
+
+        // --- 3. Scenario Analysis (top 5) ---
+        const top5 = evData.slice(0, 5);
+
+        return (
+          <>
+            {/* Section Header */}
+            <div className="mt-2">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Shield size={20} style={{ color: 'var(--accent)' }} />
+                Risk-Adjusted Returns
+              </h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
+                Probability-weighted deal valuation, portfolio concentration, and scenario modeling
+              </p>
+            </div>
+
+            {/* Expected Value Calculator */}
+            <div className="glass-card p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <DollarSign size={16} style={{ color: 'var(--accent)' }} />
+                    Expected Value Calculator
+                  </h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
+                    Risk-adjusted value = Base EV x Stage Probability x Score Adjustment
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Total Risk-Adjusted Value</div>
+                  <div className="text-xl font-bold font-mono" style={{ color: 'var(--success)' }}>{fmt(totalRAV, '$')}</div>
+                  <div className="text-xs" style={{ color: 'var(--muted)' }}>of {fmt(totalBaseEV, '$')} base EV</div>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <th className="text-left p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Target</th>
+                      <th className="text-left p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Stage</th>
+                      <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Base EV</th>
+                      <th className="text-center p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Stage Prob.</th>
+                      <th className="text-center p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Score Adj.</th>
+                      <th className="text-right p-2 text-xs" style={{ color: 'var(--success)' }}>Risk-Adj. Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {evData.map(d => {
+                      const stg = DEAL_STAGES.find(s => s.key === d.stage);
+                      return (
+                        <tr key={d.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td className="p-2">
+                            <Link href={`/targets/${d.id}`} className="hover:underline" style={{ color: 'var(--accent)' }}>
+                              {d.name}
+                            </Link>
+                          </td>
+                          <td className="p-2">
+                            <span className="badge text-[9px]" style={{ background: `${stg?.color || 'var(--muted)'}20`, color: stg?.color }}>
+                              {stg?.label}
+                            </span>
+                          </td>
+                          <td className="p-2 text-right font-mono">{fmt(d.baseEV, '$')}</td>
+                          <td className="p-2 text-center font-mono" style={{ color: 'var(--accent)' }}>{Math.round(d.stageProb * 100)}%</td>
+                          <td className="p-2 text-center font-mono" style={{ color: d.scoreAdj >= 1.0 ? 'var(--success)' : 'var(--warning)' }}>
+                            {d.scoreAdj.toFixed(2)}x
+                          </td>
+                          <td className="p-2 text-right font-mono font-bold" style={{ color: 'var(--success)' }}>{fmt(d.riskAdjustedValue, '$')}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid var(--border)' }}>
+                      <td className="p-2 font-bold" colSpan={2}>Total ({evData.length} deals)</td>
+                      <td className="p-2 text-right font-mono font-bold">{fmt(totalBaseEV, '$')}</td>
+                      <td className="p-2 text-center font-mono" style={{ color: 'var(--accent)' }}>
+                        {totalBaseEV > 0 ? `${Math.round((totalRAV / totalBaseEV) * 100)}%` : '\u2014'}
+                      </td>
+                      <td className="p-2"></td>
+                      <td className="p-2 text-right font-mono font-bold" style={{ color: 'var(--success)' }}>{fmt(totalRAV, '$')}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            {/* Portfolio Concentration Risk */}
+            <div className="glass-card p-5">
+              <h3 className="font-semibold flex items-center gap-2 mb-1">
+                <AlertTriangle size={16} style={{ color: 'var(--warning)' }} />
+                Portfolio Concentration Risk
+              </h3>
+              <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>
+                Herfindahl-Hirschman Index (HHI) across active deals — lower is more diversified
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Vertical Concentration */}
+                <div className="p-4 rounded-lg" style={{ background: 'var(--background)' }}>
+                  <div className="text-xs font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>Vertical Concentration</div>
+                  <div className="text-2xl font-bold font-mono" style={{ color: hhiColor(verticalHHI) }}>
+                    {verticalHHI.toFixed(2)}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span
+                      className="text-xs font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: `${hhiColor(verticalHHI)}20`, color: hhiColor(verticalHHI) }}
+                    >
+                      {hhiLabel(verticalHHI)}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-1">
+                    {Object.entries(verticalCounts).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([v, c]) => (
+                      <div key={v} className="flex items-center justify-between text-xs">
+                        <span style={{ color: 'var(--muted-foreground)' }}>{v}</span>
+                        <span className="font-mono">{Math.round((c / active.length) * 100)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Geographic Concentration */}
+                <div className="p-4 rounded-lg" style={{ background: 'var(--background)' }}>
+                  <div className="text-xs font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>Geographic Concentration</div>
+                  <div className="text-2xl font-bold font-mono" style={{ color: hhiColor(geoHHI) }}>
+                    {geoHHI.toFixed(2)}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span
+                      className="text-xs font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: `${hhiColor(geoHHI)}20`, color: hhiColor(geoHHI) }}
+                    >
+                      {hhiLabel(geoHHI)}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-1">
+                    {Object.entries(geoCounts).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([g, c]) => (
+                      <div key={g} className="flex items-center justify-between text-xs">
+                        <span style={{ color: 'var(--muted-foreground)' }}>{g}</span>
+                        <span className="font-mono">{Math.round((c / active.length) * 100)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Size Concentration */}
+                <div className="p-4 rounded-lg" style={{ background: 'var(--background)' }}>
+                  <div className="text-xs font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>Size Concentration</div>
+                  <div className="text-2xl font-bold font-mono" style={{ color: hhiColor(sizeHHI) }}>
+                    {sizeHHI.toFixed(2)}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span
+                      className="text-xs font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: `${hhiColor(sizeHHI)}20`, color: hhiColor(sizeHHI) }}
+                    >
+                      {hhiLabel(sizeHHI)}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span style={{ color: 'var(--muted-foreground)' }}>Small (&lt;$5M)</span>
+                      <span className="font-mono">{sizeBuckets.small}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span style={{ color: 'var(--muted-foreground)' }}>Mid ($5M-$25M)</span>
+                      <span className="font-mono">{sizeBuckets.mid}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span style={{ color: 'var(--muted-foreground)' }}>Large (&gt;$25M)</span>
+                      <span className="font-mono">{sizeBuckets.large}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Scenario Analysis Table */}
+            {top5.length > 0 && (
+              <div className="glass-card p-5">
+                <h3 className="font-semibold flex items-center gap-2 mb-1">
+                  <BarChart3 size={16} style={{ color: 'var(--accent)' }} />
+                  Scenario Analysis
+                </h3>
+                <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>
+                  Top {top5.length} deals by risk-adjusted value — Bull (1.5x), Base (1.0x), Bear (0.5x). Weighted outcome = 25% bull + 50% base + 25% bear.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                        <th className="text-left p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Target</th>
+                        <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Base EV</th>
+                        <th className="text-right p-2 text-xs" style={{ color: 'var(--success)' }}>Bull (1.5x)</th>
+                        <th className="text-right p-2 text-xs" style={{ color: 'var(--accent)' }}>Base (1.0x)</th>
+                        <th className="text-right p-2 text-xs" style={{ color: 'var(--danger)' }}>Bear (0.5x)</th>
+                        <th className="text-right p-2 text-xs font-bold" style={{ color: 'var(--foreground)' }}>Weighted EV</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {top5.map(d => {
+                        const bull = d.riskAdjustedValue * 1.5;
+                        const base = d.riskAdjustedValue;
+                        const bear = d.riskAdjustedValue * 0.5;
+                        const weighted = bull * 0.25 + base * 0.50 + bear * 0.25;
+                        return (
+                          <tr key={d.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                            <td className="p-2">
+                              <Link href={`/targets/${d.id}`} className="hover:underline" style={{ color: 'var(--accent)' }}>
+                                {d.name}
+                              </Link>
+                            </td>
+                            <td className="p-2 text-right font-mono">{fmt(d.baseEV, '$')}</td>
+                            <td className="p-2 text-right font-mono" style={{ color: 'var(--success)', background: 'rgba(16,185,129,0.06)' }}>
+                              {fmt(bull, '$')}
+                            </td>
+                            <td className="p-2 text-right font-mono" style={{ color: 'var(--accent)', background: 'rgba(59,130,246,0.06)' }}>
+                              {fmt(base, '$')}
+                            </td>
+                            <td className="p-2 text-right font-mono" style={{ color: 'var(--danger)', background: 'rgba(239,68,68,0.06)' }}>
+                              {fmt(bear, '$')}
+                            </td>
+                            <td className="p-2 text-right font-mono font-bold">{fmt(weighted, '$')}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid var(--border)' }}>
+                        <td className="p-2 font-bold">Portfolio Total</td>
+                        <td className="p-2 text-right font-mono font-bold">{fmt(top5.reduce((s, d) => s + d.baseEV, 0), '$')}</td>
+                        <td className="p-2 text-right font-mono font-bold" style={{ color: 'var(--success)' }}>
+                          {fmt(top5.reduce((s, d) => s + d.riskAdjustedValue * 1.5, 0), '$')}
+                        </td>
+                        <td className="p-2 text-right font-mono font-bold" style={{ color: 'var(--accent)' }}>
+                          {fmt(top5.reduce((s, d) => s + d.riskAdjustedValue, 0), '$')}
+                        </td>
+                        <td className="p-2 text-right font-mono font-bold" style={{ color: 'var(--danger)' }}>
+                          {fmt(top5.reduce((s, d) => s + d.riskAdjustedValue * 0.5, 0), '$')}
+                        </td>
+                        <td className="p-2 text-right font-mono font-bold">
+                          {fmt(top5.reduce((s, d) => {
+                            const b = d.riskAdjustedValue;
+                            return s + (b * 1.5 * 0.25 + b * 0.50 + b * 0.5 * 0.25);
+                          }, 0), '$')}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                <div className="flex items-center gap-4 mt-3 text-[10px]" style={{ color: 'var(--muted)' }}>
+                  <span className="flex items-center gap-1"><span className="w-3 h-2 rounded" style={{ background: 'rgba(16,185,129,0.3)' }} /> Bull (25% weight)</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-2 rounded" style={{ background: 'rgba(59,130,246,0.3)' }} /> Base (50% weight)</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-2 rounded" style={{ background: 'rgba(239,68,68,0.3)' }} /> Bear (25% weight)</span>
+                </div>
+              </div>
+            )}
+          </>
         );
       })()}
     </div>

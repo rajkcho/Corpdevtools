@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getTargets } from '@/lib/db';
 import type { Target } from '@/lib/types';
-import { Calculator, DollarSign, TrendingUp, Info, BarChart3, Printer } from 'lucide-react';
+import { Calculator, DollarSign, TrendingUp, Info, BarChart3, Printer, Landmark, LineChart, Grid3X3 } from 'lucide-react';
 
 interface ValuationInputs {
   revenue: number;
@@ -33,6 +33,95 @@ const VMS_BENCHMARKS = {
   evArr: { low: 2.0, median: 3.5, high: 5.5, premium: 8.0 },
   evEbita: { low: 6.0, median: 10.0, high: 14.0, premium: 18.0 },
 };
+
+interface LboInputs {
+  enterpriseValue: number;
+  equityPct: number;
+  debtRate: number;
+  revenueGrowth: number;
+  ebitdaMarginImprovementBps: number;
+  holdPeriod: number;
+  exitMultiple: number;
+  startingRevenue: number;
+  startingEbitdaMargin: number;
+}
+
+interface LboYearRow {
+  year: number;
+  revenue: number;
+  ebitda: number;
+  interestExpense: number;
+  debtPaydown: number;
+  debtBalance: number;
+  equityValue: number;
+}
+
+interface DcfInputs {
+  startingFcf: number;
+  growthRate: number;
+  terminalGrowthRate: number;
+  discountRate: number;
+  shareCount: number;
+}
+
+interface DcfYearRow {
+  year: number;
+  fcf: number;
+  discountFactor: number;
+  pvFcf: number;
+}
+
+function calculateLbo(lbo: LboInputs): { rows: LboYearRow[]; irr: number; moic: number } {
+  const equityInvested = lbo.enterpriseValue * (lbo.equityPct / 100);
+  let debtBalance = lbo.enterpriseValue - equityInvested;
+  const rows: LboYearRow[] = [];
+
+  let currentMargin = lbo.startingEbitdaMargin;
+
+  for (let y = 1; y <= lbo.holdPeriod; y++) {
+    const revenue = lbo.startingRevenue * Math.pow(1 + lbo.revenueGrowth / 100, y);
+    currentMargin = lbo.startingEbitdaMargin + (lbo.ebitdaMarginImprovementBps / 100) * y;
+    const ebitda = revenue * (currentMargin / 100);
+    const interestExpense = debtBalance * (lbo.debtRate / 100);
+    // Assume free cash for debt paydown = EBITDA - interest - 20% for capex/taxes
+    const freeCash = Math.max(0, ebitda - interestExpense) * 0.8;
+    const debtPaydown = Math.min(freeCash, debtBalance);
+    debtBalance = debtBalance - debtPaydown;
+    const exitEv = ebitda * lbo.exitMultiple;
+    const equityValue = exitEv - debtBalance;
+
+    rows.push({ year: y, revenue, ebitda, interestExpense, debtPaydown, debtBalance, equityValue });
+  }
+
+  const finalEquity = rows.length > 0 ? rows[rows.length - 1].equityValue : 0;
+  const moic = equityInvested > 0 ? finalEquity / equityInvested : 0;
+  const irr = equityInvested > 0 && lbo.holdPeriod > 0
+    ? (Math.pow(Math.max(0, finalEquity / equityInvested), 1 / lbo.holdPeriod) - 1) * 100
+    : 0;
+
+  return { rows, irr, moic };
+}
+
+function calculateDcf(dcf: DcfInputs): { rows: DcfYearRow[]; terminalValue: number; pvTerminal: number; enterpriseValue: number; perShare: number | null } {
+  const rows: DcfYearRow[] = [];
+  let totalPv = 0;
+
+  for (let y = 1; y <= 5; y++) {
+    const fcf = dcf.startingFcf * Math.pow(1 + dcf.growthRate / 100, y);
+    const discountFactor = Math.pow(1 + dcf.discountRate / 100, y);
+    const pvFcf = fcf / discountFactor;
+    totalPv += pvFcf;
+    rows.push({ year: y, fcf, discountFactor, pvFcf });
+  }
+
+  const year5Fcf = dcf.startingFcf * Math.pow(1 + dcf.growthRate / 100, 5);
+  const terminalValue = (year5Fcf * (1 + dcf.terminalGrowthRate / 100)) / ((dcf.discountRate - dcf.terminalGrowthRate) / 100);
+  const pvTerminal = terminalValue / Math.pow(1 + dcf.discountRate / 100, 5);
+  const enterpriseValue = totalPv + pvTerminal;
+  const perShare = dcf.shareCount > 0 ? enterpriseValue / dcf.shareCount : null;
+
+  return { rows, terminalValue, pvTerminal, enterpriseValue, perShare };
+}
 
 function fmt(n: number): string {
   if (!n || isNaN(n)) return '$0';
@@ -93,6 +182,28 @@ export default function ValuationPage() {
     evEbitaMultiple: 10,
   });
 
+  const [activeSection, setActiveSection] = useState<'comps' | 'lbo' | 'dcf' | 'sensitivity'>('comps');
+
+  const [lboInputs, setLboInputs] = useState<LboInputs>({
+    enterpriseValue: 20_000_000,
+    equityPct: 40,
+    debtRate: 6,
+    revenueGrowth: 10,
+    ebitdaMarginImprovementBps: 100,
+    holdPeriod: 5,
+    exitMultiple: 10,
+    startingRevenue: 5_000_000,
+    startingEbitdaMargin: 25,
+  });
+
+  const [dcfInputs, setDcfInputs] = useState<DcfInputs>({
+    startingFcf: 1_000_000,
+    growthRate: 12,
+    terminalGrowthRate: 2.5,
+    discountRate: 10,
+    shareCount: 0,
+  });
+
   useEffect(() => {
     setTargets(getTargets());
   }, []);
@@ -148,6 +259,51 @@ export default function ValuationPage() {
     setInputs(prev => ({ ...prev, [key]: value }));
   };
 
+  const updateLboInput = (key: keyof LboInputs, value: number) => {
+    setLboInputs(prev => ({ ...prev, [key]: value }));
+  };
+
+  const updateDcfInput = (key: keyof DcfInputs, value: number) => {
+    setDcfInputs(prev => ({ ...prev, [key]: value }));
+  };
+
+  const lboResult = calculateLbo(lboInputs);
+  const dcfResult = calculateDcf(dcfInputs);
+
+  // Sensitivity: EV as function of exit multiple (rows) and revenue growth (cols)
+  const sensitivityExitMultiples = [6, 7, 8, 9, 10, 11, 12, 13, 14];
+  const sensitivityGrowthRates = [0, 5, 10, 15, 20, 25];
+
+  function computeSensitivityEv(exitMult: number, revGrowth: number): number {
+    const result = calculateLbo({ ...lboInputs, exitMultiple: exitMult, revenueGrowth: revGrowth });
+    return result.rows.length > 0 ? result.rows[result.rows.length - 1].equityValue : 0;
+  }
+
+  // Precompute sensitivity grid for min/max coloring
+  const sensitivityGrid: number[][] = sensitivityExitMultiples.map(em =>
+    sensitivityGrowthRates.map(gr => computeSensitivityEv(em, gr))
+  );
+  const allSensValues = sensitivityGrid.flat().filter(v => v > 0);
+  const sensMin = allSensValues.length > 0 ? Math.min(...allSensValues) : 0;
+  const sensMax = allSensValues.length > 0 ? Math.max(...allSensValues) : 1;
+
+  function sensColor(val: number): string {
+    if (val <= 0) return 'rgba(239,68,68,0.25)';
+    const ratio = sensMax > sensMin ? (val - sensMin) / (sensMax - sensMin) : 0.5;
+    // Interpolate from red (0) through yellow (0.5) to green (1)
+    if (ratio < 0.5) {
+      const r = 239;
+      const g = Math.round(68 + (200 - 68) * (ratio / 0.5));
+      const b = 68;
+      return `rgba(${r},${g},${b},0.18)`;
+    } else {
+      const r = Math.round(239 - (239 - 16) * ((ratio - 0.5) / 0.5));
+      const g = Math.round(200 + (185 - 200) * ((ratio - 0.5) / 0.5));
+      const b = Math.round(68 + (129 - 68) * ((ratio - 0.5) / 0.5));
+      return `rgba(${r},${g},${b},0.18)`;
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between print:hidden">
@@ -176,6 +332,31 @@ export default function ValuationPage() {
         </div>
       </div>
 
+      {/* Section Tabs */}
+      <div className="flex gap-1 print:hidden overflow-x-auto" style={{ borderBottom: '1px solid var(--border)' }}>
+        {([
+          { key: 'comps' as const, label: 'Comps Valuation', icon: <Calculator size={14} /> },
+          { key: 'lbo' as const, label: 'LBO Model', icon: <Landmark size={14} /> },
+          { key: 'dcf' as const, label: 'DCF Model', icon: <LineChart size={14} /> },
+          { key: 'sensitivity' as const, label: 'Sensitivity Analysis', icon: <Grid3X3 size={14} /> },
+        ]).map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveSection(tab.key)}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap"
+            style={{
+              color: activeSection === tab.key ? 'var(--accent)' : 'var(--muted-foreground)',
+              borderBottom: activeSection === tab.key ? '2px solid var(--accent)' : '2px solid transparent',
+              marginBottom: '-1px',
+            }}
+          >
+            {tab.icon} {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* === COMPS VALUATION (existing) === */}
+      {activeSection === 'comps' && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Inputs */}
         <div className="space-y-4 print:hidden">
@@ -461,6 +642,326 @@ export default function ValuationPage() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* === LBO MODEL === */}
+      {activeSection === 'lbo' && (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="space-y-4">
+          <div className="glass-card p-4 space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider flex items-center gap-2" style={{ color: 'var(--muted-foreground)' }}>
+              <Landmark size={14} /> LBO Assumptions
+            </h3>
+            <InputField label="Enterprise Value / Purchase Price" value={lboInputs.enterpriseValue} onChange={v => updateLboInput('enterpriseValue', v)} prefix="$" step={1000000} />
+            <InputField label="Starting Revenue" value={lboInputs.startingRevenue} onChange={v => updateLboInput('startingRevenue', v)} prefix="$" step={500000} />
+            <InputField label="Starting EBITDA Margin %" value={lboInputs.startingEbitdaMargin} onChange={v => updateLboInput('startingEbitdaMargin', v)} suffix="%" max={80} decimal />
+            <InputField label="Equity Contribution %" value={lboInputs.equityPct} onChange={v => updateLboInput('equityPct', v)} suffix="%" max={100} />
+            <InputField label="Debt Interest Rate" value={lboInputs.debtRate} onChange={v => updateLboInput('debtRate', v)} suffix="%" max={20} decimal step={0.5} />
+            <InputField label="Revenue Growth Rate (per year)" value={lboInputs.revenueGrowth} onChange={v => updateLboInput('revenueGrowth', v)} suffix="%" max={50} decimal step={1} />
+            <InputField label="EBITDA Margin Improvement (bps/yr)" value={lboInputs.ebitdaMarginImprovementBps} onChange={v => updateLboInput('ebitdaMarginImprovementBps', v)} suffix="bps" max={500} step={25} />
+            <InputField label="Hold Period (years)" value={lboInputs.holdPeriod} onChange={v => updateLboInput('holdPeriod', v)} suffix="yrs" min={1} max={10} />
+            <InputField label="Exit Multiple (EV/EBITDA)" value={lboInputs.exitMultiple} onChange={v => updateLboInput('exitMultiple', v)} suffix="x" max={30} decimal step={0.5} />
+          </div>
+
+          {/* LBO Summary Cards */}
+          <div className="glass-card p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--muted-foreground)' }}>
+              Returns Summary
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-lg font-bold font-mono" style={{ color: lboResult.irr >= 20 ? 'var(--success)' : lboResult.irr >= 15 ? 'var(--warning)' : 'var(--danger)' }}>
+                  {lboResult.irr > 0 ? `${lboResult.irr.toFixed(1)}%` : '—'}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>IRR</div>
+              </div>
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-lg font-bold font-mono" style={{ color: lboResult.moic >= 3 ? 'var(--success)' : lboResult.moic >= 2 ? 'var(--warning)' : 'var(--danger)' }}>
+                  {lboResult.moic > 0 ? `${lboResult.moic.toFixed(2)}x` : '—'}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>MOIC</div>
+              </div>
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-lg font-bold font-mono" style={{ color: 'var(--accent)' }}>
+                  {fmt(lboInputs.enterpriseValue * (lboInputs.equityPct / 100))}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>Equity Invested</div>
+              </div>
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-lg font-bold font-mono" style={{ color: 'var(--accent)' }}>
+                  {fmt(lboInputs.enterpriseValue - lboInputs.enterpriseValue * (lboInputs.equityPct / 100))}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>Initial Debt</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-2 space-y-4">
+          <div className="glass-card p-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-2" style={{ color: 'var(--accent)' }}>
+              <TrendingUp size={14} /> Year-by-Year LBO Projections
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <th className="text-left p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Year</th>
+                    <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Revenue</th>
+                    <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>EBITDA</th>
+                    <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Interest</th>
+                    <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Debt Paydown</th>
+                    <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Debt Balance</th>
+                    <th className="text-right p-2 text-xs font-semibold" style={{ color: 'var(--accent)' }}>Equity Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--accent-muted)' }}>
+                    <td className="p-2 font-medium">Entry</td>
+                    <td className="p-2 text-right font-mono text-xs">{fmt(lboInputs.startingRevenue)}</td>
+                    <td className="p-2 text-right font-mono text-xs">{fmt(lboInputs.startingRevenue * lboInputs.startingEbitdaMargin / 100)}</td>
+                    <td className="p-2 text-right font-mono text-xs">—</td>
+                    <td className="p-2 text-right font-mono text-xs">—</td>
+                    <td className="p-2 text-right font-mono text-xs">{fmt(lboInputs.enterpriseValue * (1 - lboInputs.equityPct / 100))}</td>
+                    <td className="p-2 text-right font-mono text-xs font-bold" style={{ color: 'var(--accent)' }}>{fmt(lboInputs.enterpriseValue * (lboInputs.equityPct / 100))}</td>
+                  </tr>
+                  {lboResult.rows.map((row, i) => {
+                    const isExit = i === lboResult.rows.length - 1;
+                    return (
+                      <tr key={row.year} style={{ borderBottom: '1px solid var(--border)', background: isExit ? 'var(--accent-muted)' : undefined }}>
+                        <td className="p-2 font-medium">{isExit ? `Year ${row.year} (Exit)` : `Year ${row.year}`}</td>
+                        <td className="p-2 text-right font-mono text-xs">{fmt(row.revenue)}</td>
+                        <td className="p-2 text-right font-mono text-xs">{fmt(row.ebitda)}</td>
+                        <td className="p-2 text-right font-mono text-xs">{fmt(row.interestExpense)}</td>
+                        <td className="p-2 text-right font-mono text-xs">{fmt(row.debtPaydown)}</td>
+                        <td className="p-2 text-right font-mono text-xs">{fmt(row.debtBalance)}</td>
+                        <td className="p-2 text-right font-mono text-xs font-bold" style={{ color: isExit ? 'var(--accent)' : 'var(--foreground)' }}>
+                          {fmt(row.equityValue)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
+              Assumes 80% of (EBITDA - interest) available for debt paydown (20% for capex/taxes). Equity value = Exit EV - remaining debt.
+            </p>
+          </div>
+        </div>
+      </div>
+      )}
+
+      {/* === DCF MODEL === */}
+      {activeSection === 'dcf' && (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="space-y-4">
+          <div className="glass-card p-4 space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider flex items-center gap-2" style={{ color: 'var(--muted-foreground)' }}>
+              <LineChart size={14} /> DCF Assumptions
+            </h3>
+            <InputField label="Starting Free Cash Flow" value={dcfInputs.startingFcf} onChange={v => updateDcfInput('startingFcf', v)} prefix="$" step={100000} />
+            <InputField label="Growth Rate (Years 1-5)" value={dcfInputs.growthRate} onChange={v => updateDcfInput('growthRate', v)} suffix="%" max={50} decimal step={1} />
+            <InputField label="Terminal Growth Rate" value={dcfInputs.terminalGrowthRate} onChange={v => updateDcfInput('terminalGrowthRate', v)} suffix="%" max={10} decimal step={0.5} />
+            <InputField label="Discount Rate / WACC" value={dcfInputs.discountRate} onChange={v => updateDcfInput('discountRate', v)} suffix="%" max={25} decimal step={0.5} min={1} />
+            <InputField label="Share Count (optional)" value={dcfInputs.shareCount} onChange={v => updateDcfInput('shareCount', v)} step={1000} />
+            <div className="text-xs space-y-1 pt-2 border-t" style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}>
+              <div className="font-medium mb-1">Notes:</div>
+              <div>Terminal growth must be less than discount rate</div>
+              <div>Leave share count at 0 to omit per-share value</div>
+            </div>
+          </div>
+
+          {/* DCF Summary Cards */}
+          <div className="glass-card p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--muted-foreground)' }}>
+              Valuation Summary
+            </h3>
+            <div className="grid grid-cols-1 gap-3">
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-xl font-bold font-mono" style={{ color: 'var(--accent)' }}>
+                  {fmt(dcfResult.enterpriseValue)}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>Enterprise Value (DCF)</div>
+              </div>
+              {dcfResult.perShare !== null && (
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-xl font-bold font-mono" style={{ color: 'var(--success)' }}>
+                  ${dcfResult.perShare.toFixed(2)}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>Per-Share Value</div>
+              </div>
+              )}
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-lg font-bold font-mono">{fmt(dcfResult.pvTerminal)}</div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>PV of Terminal Value</div>
+              </div>
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-lg font-bold font-mono">
+                  {dcfResult.enterpriseValue > 0 ? `${((dcfResult.pvTerminal / dcfResult.enterpriseValue) * 100).toFixed(0)}%` : '—'}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>Terminal Value % of EV</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-2 space-y-4">
+          <div className="glass-card p-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-2" style={{ color: 'var(--accent)' }}>
+              <TrendingUp size={14} /> Year-by-Year FCF Projections
+            </h3>
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  <th className="text-left p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Year</th>
+                  <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Free Cash Flow</th>
+                  <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Discount Factor</th>
+                  <th className="text-right p-2 text-xs font-semibold" style={{ color: 'var(--accent)' }}>PV of FCF</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dcfResult.rows.map(row => (
+                  <tr key={row.year} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td className="p-2 font-medium">Year {row.year}</td>
+                    <td className="p-2 text-right font-mono text-xs">{fmt(row.fcf)}</td>
+                    <td className="p-2 text-right font-mono text-xs">{row.discountFactor.toFixed(3)}</td>
+                    <td className="p-2 text-right font-mono text-xs font-bold" style={{ color: 'var(--accent)' }}>{fmt(row.pvFcf)}</td>
+                  </tr>
+                ))}
+                <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--accent-muted)' }}>
+                  <td className="p-2 font-medium" colSpan={2}>Terminal Value</td>
+                  <td className="p-2 text-right font-mono text-xs">{fmt(dcfResult.terminalValue)}</td>
+                  <td className="p-2 text-right font-mono text-xs font-bold" style={{ color: 'var(--accent)' }}>{fmt(dcfResult.pvTerminal)}</td>
+                </tr>
+                <tr style={{ background: 'var(--accent-muted)' }}>
+                  <td className="p-2 font-bold" colSpan={3}>Enterprise Value</td>
+                  <td className="p-2 text-right font-mono font-bold text-base" style={{ color: 'var(--accent)' }}>{fmt(dcfResult.enterpriseValue)}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
+              Gordon Growth Model terminal value: FCF(Y5) x (1 + g) / (WACC - g). Discount rate: {dcfInputs.discountRate}%, terminal growth: {dcfInputs.terminalGrowthRate}%.
+            </p>
+          </div>
+        </div>
+      </div>
+      )}
+
+      {/* === SENSITIVITY ANALYSIS === */}
+      {activeSection === 'sensitivity' && (
+      <div className="space-y-4">
+        <div className="glass-card p-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-2" style={{ color: 'var(--accent)' }}>
+            <Grid3X3 size={14} /> LBO Equity Value Sensitivity
+          </h3>
+          <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>
+            Equity value at exit as a function of exit multiple (rows) and revenue growth rate (columns). Based on current LBO assumptions: {fmt(lboInputs.enterpriseValue)} EV, {lboInputs.equityPct}% equity, {lboInputs.holdPeriod}yr hold.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  <th className="p-2 text-left" style={{ color: 'var(--muted)', minWidth: 100 }}>Exit Multiple \ Growth</th>
+                  {sensitivityGrowthRates.map(gr => {
+                    const isCurrent = gr === Math.round(lboInputs.revenueGrowth);
+                    return (
+                      <th key={gr} className="p-2 text-right font-mono" style={{ color: isCurrent ? 'var(--accent)' : 'var(--muted-foreground)', fontWeight: isCurrent ? 700 : 400 }}>
+                        {gr}%
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {sensitivityExitMultiples.map((em, ri) => {
+                  const isCurrentRow = em === Math.round(lboInputs.exitMultiple);
+                  return (
+                    <tr key={em} style={{ borderBottom: '1px solid var(--border)', background: isCurrentRow ? 'var(--accent-muted)' : undefined }}>
+                      <td className="p-2 font-mono" style={{ color: isCurrentRow ? 'var(--accent)' : 'var(--muted-foreground)', fontWeight: isCurrentRow ? 700 : 400 }}>
+                        {em}x EBITDA
+                      </td>
+                      {sensitivityGrowthRates.map((gr, ci) => {
+                        const val = sensitivityGrid[ri][ci];
+                        const isCurrent = isCurrentRow && gr === Math.round(lboInputs.revenueGrowth);
+                        return (
+                          <td key={gr} className="p-2 text-right font-mono" style={{
+                            color: val <= 0 ? 'var(--danger)' : isCurrent ? 'var(--accent)' : 'var(--foreground)',
+                            fontWeight: isCurrent ? 700 : 400,
+                            background: sensColor(val),
+                          }}>
+                            {val <= 0 ? 'Neg.' : fmt(val)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center gap-4 mt-3 text-xs" style={{ color: 'var(--muted)' }}>
+            <span>Color scale:</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded" style={{ background: 'rgba(239,68,68,0.18)' }} /> Lower</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded" style={{ background: 'rgba(239,200,68,0.18)' }} /> Mid</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded" style={{ background: 'rgba(16,185,129,0.18)' }} /> Higher</span>
+          </div>
+        </div>
+
+        {/* IRR Sensitivity */}
+        <div className="glass-card p-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-2" style={{ color: 'var(--accent)' }}>
+            <BarChart3 size={14} /> IRR Sensitivity
+          </h3>
+          <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>
+            IRR at exit across the same exit multiple and revenue growth combinations.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  <th className="p-2 text-left" style={{ color: 'var(--muted)', minWidth: 100 }}>Exit Multiple \ Growth</th>
+                  {sensitivityGrowthRates.map(gr => {
+                    const isCurrent = gr === Math.round(lboInputs.revenueGrowth);
+                    return (
+                      <th key={gr} className="p-2 text-right font-mono" style={{ color: isCurrent ? 'var(--accent)' : 'var(--muted-foreground)', fontWeight: isCurrent ? 700 : 400 }}>
+                        {gr}%
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {sensitivityExitMultiples.map(em => {
+                  const isCurrentRow = em === Math.round(lboInputs.exitMultiple);
+                  return (
+                    <tr key={em} style={{ borderBottom: '1px solid var(--border)', background: isCurrentRow ? 'var(--accent-muted)' : undefined }}>
+                      <td className="p-2 font-mono" style={{ color: isCurrentRow ? 'var(--accent)' : 'var(--muted-foreground)', fontWeight: isCurrentRow ? 700 : 400 }}>
+                        {em}x EBITDA
+                      </td>
+                      {sensitivityGrowthRates.map(gr => {
+                        const result = calculateLbo({ ...lboInputs, exitMultiple: em, revenueGrowth: gr });
+                        const isCurrent = isCurrentRow && gr === Math.round(lboInputs.revenueGrowth);
+                        return (
+                          <td key={gr} className="p-2 text-right font-mono" style={{
+                            color: result.irr <= 0 ? 'var(--danger)' : result.irr >= 20 ? 'var(--success)' : result.irr >= 15 ? 'var(--warning)' : 'var(--foreground)',
+                            fontWeight: isCurrent ? 700 : 400,
+                            background: isCurrent ? 'rgba(59,130,246,0.1)' : undefined,
+                          }}>
+                            {result.irr <= 0 ? 'Neg.' : `${result.irr.toFixed(1)}%`}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      )}
+
     </div>
   );
 }

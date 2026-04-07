@@ -5,6 +5,7 @@ import { getTargets } from '@/lib/db';
 import type { Target } from '@/lib/types';
 import { BarChart3, Target as TargetIcon, TrendingUp, CheckCircle2, XCircle, Minus } from 'lucide-react';
 import Link from 'next/link';
+import ComparableTransactions from '@/components/ComparableTransactions';
 
 interface Benchmark {
   label: string;
@@ -326,6 +327,13 @@ export default function BenchmarksPage() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Comparable Transactions */}
+      <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+        <div className="p-4 border-b" style={{ borderColor: 'var(--border)' }}>
+          <ComparableTransactions />
         </div>
       </div>
 
