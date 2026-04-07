@@ -39,6 +39,261 @@ const TOUCHPOINT_ICONS: Record<string, React.ReactNode> = {
   other: <Calendar size={14} />,
 };
 
+const MEETING_TEMPLATES = [
+  {
+    label: 'Intro Call',
+    text: `# Introductory Call Notes
+**Date:** [DATE]
+**Attendees:** [NAMES]
+**Company:** [COMPANY]
+
+## Background
+- How they heard about us / how we found them:
+- Company history & founding story:
+- Current ownership structure:
+
+## Business Overview
+- Core product/service description:
+- Target customer profile:
+- Key verticals served:
+- Competitive positioning:
+
+## Financial Highlights (if shared)
+- Revenue range:
+- Growth trajectory:
+- Recurring revenue mix:
+- Profitability indicators:
+
+## Motivation & Timeline
+- Why considering a transaction now:
+- Previous conversations with acquirers:
+- Desired timeline:
+- Key concerns about a sale:
+
+## Next Steps
+- [ ]
+- [ ]
+- [ ]
+
+## Initial Impressions
+- Fit assessment (1-5):
+- Key strengths observed:
+- Potential concerns:`,
+  },
+  {
+    label: 'Management Presentation',
+    text: `# Management Presentation Notes
+**Date:** [DATE]
+**Attendees:** [NAMES]
+**Company:** [COMPANY]
+**Presenter(s):** [NAMES]
+
+## Company Overview
+- Mission/vision statement:
+- Year founded / key milestones:
+- Current headcount:
+- Office locations:
+
+## Product Deep-Dive
+- Core platform capabilities:
+- Technology stack:
+- Key differentiators:
+- Product roadmap highlights:
+- IP/patents:
+
+## Market & Competition
+- TAM/SAM estimate:
+- Market growth rate:
+- Top 3 competitors & differentiation:
+- Win/loss trends:
+
+## Customer Analysis
+- Total customer count:
+- Logo retention rate:
+- Net revenue retention:
+- Top 10 customer concentration %:
+- Average contract value:
+- Customer acquisition cost:
+
+## Financial Performance
+- Revenue (TTM):
+- Revenue growth (YoY):
+- Gross margin:
+- EBITDA / EBITDA margin:
+- Recurring vs non-recurring split:
+- Key cost drivers:
+
+## Team & Organization
+- Leadership team assessment:
+- Key person dependencies:
+- Hiring plans:
+- Culture observations:
+
+## Growth Strategy
+- Organic growth levers:
+- M&A appetite:
+- Geographic expansion:
+- New product initiatives:
+
+## Risks & Concerns
+-
+-
+-
+
+## Valuation Discussion (if any)
+- Seller expectations:
+- Comparable transactions mentioned:
+- Deal structure preferences:
+
+## Action Items
+- [ ]
+- [ ]
+- [ ] `,
+  },
+  {
+    label: 'Site Visit',
+    text: `# Site Visit Notes
+**Date:** [DATE]
+**Location:** [ADDRESS]
+**Attendees:** [NAMES]
+**Host(s):** [NAMES]
+
+## Facility Overview
+- Office/facility type:
+- Size & condition:
+- Lease vs owned:
+- Lease expiry:
+
+## Team Observations
+- Team size on-site:
+- Remote vs in-office mix:
+- Morale / energy level:
+- Key people met:
+
+## Technology & Infrastructure
+- Development environment:
+- Server/cloud infrastructure:
+- Security practices observed:
+- Tools & platforms in use:
+
+## Operations
+- Development methodology (agile, etc.):
+- Support/service delivery model:
+- QA/testing processes:
+- Deployment frequency:
+
+## Customer Interactions (if any)
+- Customer references provided:
+- Customer feedback themes:
+
+## Culture & Environment
+- Office culture observations:
+- Values alignment with our approach:
+- Integration considerations:
+
+## Red Flags / Concerns
+-
+-
+
+## Positive Signals
+-
+-
+
+## Follow-Up Items
+- [ ]
+- [ ] `,
+  },
+  {
+    label: 'DD Kickoff',
+    text: `# Due Diligence Kickoff Meeting
+**Date:** [DATE]
+**Attendees:** [NAMES]
+**Company:** [COMPANY]
+
+## DD Scope & Timeline
+- Phase: [Preliminary / Detailed / Confirmatory]
+- Target completion date:
+- Key milestones:
+
+## Workstream Assignments
+- Commercial DD lead:
+- Financial DD lead:
+- Technical DD lead:
+- Legal DD lead:
+- HR DD lead:
+- Tax DD lead:
+
+## Initial Data Room Review
+- Documents received:
+- Documents outstanding:
+- Data quality assessment:
+
+## Priority Focus Areas
+1.
+2.
+3.
+
+## Known Risks / Red Flags
+-
+-
+
+## Key Questions for Management
+1.
+2.
+3.
+
+## Next Steps
+- [ ]
+- [ ] `,
+  },
+  {
+    label: 'Negotiation / LOI',
+    text: `# Negotiation Meeting Notes
+**Date:** [DATE]
+**Attendees:** [NAMES]
+**Company:** [COMPANY]
+
+## Valuation Discussion
+- Our proposed range:
+- Seller's expectation:
+- Basis of valuation (multiple, methodology):
+- Gap analysis:
+
+## Deal Structure
+- Cash vs equity mix:
+- Earnout provisions:
+- Holdback / escrow:
+- Working capital adjustment:
+
+## Key Terms Discussed
+- Representations & warranties:
+- Indemnification:
+- Non-compete terms:
+- Employment/retention arrangements:
+- Transition services:
+
+## Seller Concerns
+-
+-
+
+## Our Concerns
+-
+-
+
+## Points of Agreement
+-
+-
+
+## Open Items
+-
+-
+
+## Next Steps
+- [ ]
+- [ ] `,
+  },
+];
+
 export default function TargetDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -58,6 +313,7 @@ export default function TargetDetailPage() {
   const [dealTerms, setDealTerms] = useState<DealTerm[]>([]);
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
   const [journal, setJournal] = useState<JournalEntry[]>([]);
+  const [templateText, setTemplateText] = useState('');
 
   const reload = useCallback(() => {
     const t = getTarget(id);
@@ -650,9 +906,29 @@ export default function TargetDetailPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Meeting Notes</h2>
-            <button onClick={() => setShowUploadModal(true)} className="btn btn-primary btn-sm">
+            <button onClick={() => { setTemplateText(''); setShowUploadModal(true); }} className="btn btn-primary btn-sm">
               <Upload size={14} /> Upload Notes
             </button>
+          </div>
+          {/* Template Buttons */}
+          <div className="glass-card p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText size={14} style={{ color: 'var(--muted-foreground)' }} />
+              <span className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Use Template</span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'thin' }}>
+              {MEETING_TEMPLATES.map(tmpl => (
+                <button
+                  key={tmpl.label}
+                  type="button"
+                  className="btn btn-secondary btn-sm whitespace-nowrap"
+                  style={{ borderRadius: '9999px', fontSize: '0.75rem', padding: '4px 12px' }}
+                  onClick={() => { setTemplateText(tmpl.text); setShowUploadModal(true); }}
+                >
+                  {tmpl.label}
+                </button>
+              ))}
+            </div>
           </div>
           {meetingNotes.length === 0 ? (
             <div className="glass-card p-8 text-center" style={{ color: 'var(--muted)' }}>
@@ -1007,12 +1283,13 @@ export default function TargetDetailPage() {
       </Modal>
 
       {/* Upload Modal */}
-      <Modal open={showUploadModal} onClose={() => setShowUploadModal(false)} title="Upload Meeting Notes">
+      <Modal open={showUploadModal} onClose={() => { setShowUploadModal(false); setTemplateText(''); }} title="Upload Meeting Notes">
         <MeetingNoteUpload
           targetId={id}
           targetName={target.name}
-          onDone={() => { reload(); setShowUploadModal(false); }}
-          onCancel={() => setShowUploadModal(false)}
+          initialText={templateText}
+          onDone={() => { reload(); setShowUploadModal(false); setTemplateText(''); }}
+          onCancel={() => { setShowUploadModal(false); setTemplateText(''); }}
         />
       </Modal>
     </div>
@@ -1154,7 +1431,7 @@ function ContactForm({ onSubmit, onCancel, existingContacts = [] }: { onSubmit: 
   );
 }
 
-function MeetingNoteUpload({ targetId, targetName, onDone, onCancel }: { targetId: string; targetName: string; onDone: () => void; onCancel: () => void }) {
+function MeetingNoteUpload({ targetId, targetName, initialText, onDone, onCancel }: { targetId: string; targetName: string; initialText?: string; onDone: () => void; onCancel: () => void }) {
   const [rawText, setRawText] = useState('');
   const [fileName, setFileName] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -1166,6 +1443,12 @@ function MeetingNoteUpload({ targetId, targetName, onDone, onCancel }: { targetI
   useEffect(() => {
     import('@/lib/ai').then(mod => setAIAvailable(mod.isAIConfigured()));
   }, []);
+
+  useEffect(() => {
+    if (initialText) {
+      setRawText(initialText);
+    }
+  }, [initialText]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

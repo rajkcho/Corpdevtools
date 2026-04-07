@@ -30,6 +30,7 @@ import { getNotificationCounts, getAlerts, type NotificationCounts, type Alert }
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/search', label: 'Search', icon: Search },
   { href: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
   { href: '/targets', label: 'Targets', icon: Target },
   { href: '/compare', label: 'Compare', icon: ArrowUpDown },

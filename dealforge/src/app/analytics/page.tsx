@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { getTargets, getTouchpoints, getDDProjects } from '@/lib/db';
-import { DEAL_STAGES, VERTICALS } from '@/lib/types';
-import type { Target, Touchpoint, DDProject, DealStage } from '@/lib/types';
+import { DEAL_STAGES, VERTICALS, SCORE_CRITERIA } from '@/lib/types';
+import type { Target, Touchpoint, DDProject, DealStage, DealScore } from '@/lib/types';
 import { getActivities } from '@/lib/db';
 import type { ActivityEntry } from '@/lib/types';
-import { TrendingUp, Clock, Users, DollarSign, Activity, BarChart3, ArrowRight, AlertTriangle, MapPin, Calendar } from 'lucide-react';
+import { TrendingUp, Clock, Users, DollarSign, Activity, BarChart3, ArrowRight, AlertTriangle, MapPin, Calendar, Grid } from 'lucide-react';
 import Link from 'next/link';
 
 function fmt(n: number, prefix = ''): string {
@@ -1190,6 +1190,71 @@ export default function AnalyticsPage() {
                             {v.avgScore.toFixed(1)}
                           </span>
                         ) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Deal Scorecard Heatmap */}
+      {(() => {
+        const scored = targets.filter(t => t.score).sort((a, b) => (b.weighted_score || 0) - (a.weighted_score || 0));
+        if (scored.length < 2) return null;
+
+        const cellColor = (val: number) => {
+          if (val >= 5) return 'rgba(16,185,129,0.8)';
+          if (val >= 4) return 'rgba(16,185,129,0.5)';
+          if (val >= 3) return 'rgba(245,158,11,0.5)';
+          if (val >= 2) return 'rgba(249,115,22,0.5)';
+          return 'rgba(239,68,68,0.5)';
+        };
+
+        return (
+          <div className="glass-card p-5">
+            <h2 className="font-semibold mb-1 flex items-center gap-2">
+              <Grid size={16} style={{ color: 'var(--accent)' }} /> Deal Scorecard Heatmap
+            </h2>
+            <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>VMS acquisition criteria scores across all evaluated targets</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <th className="text-left p-2 text-xs sticky left-0" style={{ color: 'var(--muted-foreground)', background: 'var(--card)' }}>Target</th>
+                    {SCORE_CRITERIA.map(c => (
+                      <th key={c.key} className="text-center p-2 text-xs" style={{ color: 'var(--muted-foreground)' }} title={c.description}>
+                        {c.label.split(' ').slice(0, 2).join(' ')}
+                      </th>
+                    ))}
+                    <th className="text-center p-2 text-xs font-bold" style={{ color: 'var(--accent)' }}>Weighted</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {scored.map(t => (
+                    <tr key={t.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td className="p-2 font-medium truncate max-w-[150px] sticky left-0" style={{ background: 'var(--card)' }}>
+                        <Link href={`/targets/${t.id}`} className="hover:underline" style={{ color: 'var(--accent)' }}>{t.name}</Link>
+                      </td>
+                      {SCORE_CRITERIA.map(c => {
+                        const val = t.score![c.key];
+                        return (
+                          <td key={c.key} className="p-2 text-center">
+                            <span
+                              className="inline-block w-8 h-8 rounded flex items-center justify-center font-mono font-bold text-white text-sm"
+                              style={{ background: cellColor(val) }}
+                            >
+                              {val}
+                            </span>
+                          </td>
+                        );
+                      })}
+                      <td className="p-2 text-center">
+                        <span className="font-mono font-bold text-base" style={{ color: (t.weighted_score || 0) >= 3.5 ? 'var(--success)' : (t.weighted_score || 0) >= 2.5 ? 'var(--warning)' : 'var(--danger)' }}>
+                          {(t.weighted_score || 0).toFixed(1)}
+                        </span>
                       </td>
                     </tr>
                   ))}

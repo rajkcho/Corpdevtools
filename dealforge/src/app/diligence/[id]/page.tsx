@@ -890,38 +890,55 @@ function RisksPanel({ projectId, risks, onReload }: { projectId: string; risks: 
           </div>
         </div>
 
-        {/* 5x5 Heatmap */}
-        <div className="glass-card p-4">
-          <div className="text-xs font-medium mb-3" style={{ color: 'var(--muted-foreground)' }}>Impact vs Probability Matrix</div>
-          <div className="flex gap-1">
-            <div className="flex flex-col justify-between items-center mr-1 py-1" style={{ fontSize: '0.6rem', color: 'var(--muted)', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
-              IMPACT
+        {/* Risk Matrix Heatmap */}
+        <div className="glass-card p-5">
+          <h3 className="font-semibold mb-3 flex items-center gap-2">
+            <AlertTriangle size={16} style={{ color: 'var(--warning)' }} /> Risk Heat Map
+          </h3>
+          <div className="flex items-end gap-2">
+            <div className="flex flex-col items-center mr-1">
+              <span className="text-[10px] font-medium mb-1" style={{ color: 'var(--muted-foreground)', writingMode: 'vertical-lr', transform: 'rotate(180deg)' }}>Impact →</span>
             </div>
-            <div className="flex-1">
-              <div className="grid grid-cols-5 gap-0.5">
-                {[5, 4, 3, 2, 1].map(impact =>
+            <div>
+              <div className="grid grid-cols-5 gap-1" style={{ width: 'fit-content' }}>
+                {[5, 4, 3, 2, 1].map(impact => (
                   [1, 2, 3, 4, 5].map(prob => {
                     const score = impact * prob;
-                    const count = risks.filter(r => r.impact === impact && r.probability === prob && r.status !== 'closed').length;
-                    const bg = score >= 15 ? 'rgba(239,68,68,0.6)' : score >= 10 ? 'rgba(239,68,68,0.3)' : score >= 6 ? 'rgba(245,158,11,0.3)' : score >= 3 ? 'rgba(59,130,246,0.2)' : 'rgba(16,185,129,0.15)';
+                    const risksInCell = risks.filter(r => r.impact === impact && r.probability === prob && r.status !== 'closed');
+                    const bg = score >= 16 ? 'rgba(239,68,68,0.6)'
+                      : score >= 10 ? 'rgba(249,115,22,0.5)'
+                      : score >= 5 ? 'rgba(245,158,11,0.4)'
+                      : 'rgba(16,185,129,0.3)';
                     return (
                       <div
                         key={`${impact}-${prob}`}
-                        className="aspect-square rounded flex items-center justify-center text-xs font-bold"
-                        style={{ background: bg, color: count > 0 ? 'var(--foreground)' : 'transparent', minHeight: 28 }}
-                        title={`Impact ${impact} × Prob ${prob} = ${score}`}
+                        className="w-12 h-12 rounded flex items-center justify-center relative"
+                        style={{ background: bg }}
+                        title={`Impact: ${impact}, Probability: ${prob}, Score: ${score}`}
                       >
-                        {count > 0 ? count : ''}
+                        {risksInCell.length > 0 && (
+                          <span className="font-bold text-sm text-white bg-black/40 rounded-full w-6 h-6 flex items-center justify-center">
+                            {risksInCell.length}
+                          </span>
+                        )}
                       </div>
                     );
                   })
-                )}
+                ))}
               </div>
-              <div className="flex justify-between mt-1 px-1" style={{ fontSize: '0.55rem', color: 'var(--muted)' }}>
-                <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+              <div className="flex justify-between mt-1 px-1" style={{ width: 'fit-content' }}>
+                {[1, 2, 3, 4, 5].map(p => (
+                  <span key={p} className="w-12 text-center text-[10px] font-mono" style={{ color: 'var(--muted)' }}>{p}</span>
+                ))}
               </div>
-              <div className="text-center mt-0.5" style={{ fontSize: '0.6rem', color: 'var(--muted)' }}>PROBABILITY</div>
+              <div className="text-center text-[10px] mt-0.5" style={{ color: 'var(--muted-foreground)' }}>Probability →</div>
             </div>
+          </div>
+          <div className="flex gap-3 mt-3 text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'rgba(16,185,129,0.3)' }} /> Low (1-4)</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'rgba(245,158,11,0.4)' }} /> Medium (5-9)</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'rgba(249,115,22,0.5)' }} /> High (10-15)</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'rgba(239,68,68,0.6)' }} /> Critical (16-25)</span>
           </div>
         </div>
       </div>

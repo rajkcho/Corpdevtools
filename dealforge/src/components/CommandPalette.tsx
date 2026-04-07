@@ -311,6 +311,18 @@ export default function CommandPalette() {
           <span><kbd className="px-1 py-0.5 rounded" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>↑↓</kbd> navigate</span>
           <span><kbd className="px-1 py-0.5 rounded" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>↵</kbd> select</span>
           <span><kbd className="px-1 py-0.5 rounded" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>esc</kbd> close</span>
+          {query.trim() && (
+            <button
+              onClick={() => {
+                router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+                setOpen(false);
+              }}
+              className="ml-auto flex items-center gap-1 font-medium transition-colors"
+              style={{ color: 'var(--accent)' }}
+            >
+              View all results <Search size={12} />
+            </button>
+          )}
         </div>
       </div>
     </div>
