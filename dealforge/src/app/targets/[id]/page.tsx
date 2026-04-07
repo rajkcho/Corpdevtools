@@ -49,7 +49,7 @@ export default function TargetDetailPage() {
   const [showTouchpointModal, setShowTouchpointModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'timeline' | 'notes' | 'contacts' | 'journal' | 'dealroom' | 'scoring'>('timeline');
+  const [activeTab, setActiveTab] = useState<'timeline' | 'notes' | 'contacts' | 'journal' | 'dealroom' | 'scoring' | 'integration'>('timeline');
   const [ddProjectId, setDDProjectId] = useState<string | null>(null);
   const [dealTerms, setDealTerms] = useState<DealTerm[]>([]);
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
@@ -442,6 +442,7 @@ export default function TargetDetailPage() {
           { key: 'journal', label: 'Journal' },
           { key: 'dealroom', label: 'Deal Room' },
           { key: 'scoring', label: 'Scoring' },
+          ...(['closing', 'closed_won'].includes(target.stage) ? [{ key: 'integration' as const, label: '100-Day Plan' }] : []),
         ] as const).map(tab => (
           <button
             key={tab.key}
@@ -875,6 +876,11 @@ export default function TargetDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Integration Tab */}
+      {activeTab === 'integration' && (
+        <IntegrationPanel targetId={id} />
       )}
 
       {/* Edit Modal */}
@@ -2161,6 +2167,139 @@ function MilestoneTracker({ targetId }: { targetId: string }) {
             <span className="text-[10px] capitalize" style={{ color: 'var(--muted)' }}>{key}</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// === INTEGRATION PANEL ===
+function IntegrationPanel({ targetId }: { targetId: string }) {
+  const [items, setItems] = useState<{ id: string; category: string; task: string; timeline: string; completed: boolean; owner?: string; notes?: string }[]>([]);
+  const [filterTimeline, setFilterTimeline] = useState<string>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+
+  useEffect(() => {
+    import('@/lib/integration-checklist').then(mod => {
+      setItems(mod.getIntegrationChecklist(targetId));
+    });
+  }, [targetId]);
+
+  const save = (updated: typeof items) => {
+    setItems(updated);
+    import('@/lib/integration-checklist').then(mod => {
+      mod.saveIntegrationChecklist(targetId, updated as import('@/lib/integration-checklist').IntegrationItem[]);
+    });
+  };
+
+  const toggle = (id: string) => {
+    save(items.map(i => i.id === id ? { ...i, completed: !i.completed } : i));
+  };
+
+  const filtered = items.filter(i => {
+    if (filterTimeline !== 'all' && i.timeline !== filterTimeline) return false;
+    if (filterCategory !== 'all' && i.category !== filterCategory) return false;
+    return true;
+  });
+
+  const completed = items.filter(i => i.completed).length;
+  const total = items.length;
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  const timelineLabels: Record<string, string> = {
+    day_1: 'Day 1', week_1: 'Week 1', month_1: 'Month 1', month_3: 'Month 3', ongoing: 'Ongoing',
+  };
+  const timelineColors: Record<string, string> = {
+    day_1: 'var(--danger)', week_1: 'var(--warning)', month_1: 'var(--accent)', month_3: 'var(--success)', ongoing: 'var(--muted)',
+  };
+
+  const categories = Array.from(new Set(items.map(i => i.category)));
+  const phases = Object.keys(timelineLabels);
+
+  const phaseProgress = phases.map(p => {
+    const phaseItems = items.filter(i => i.timeline === p);
+    const done = phaseItems.filter(i => i.completed).length;
+    return { key: p, label: timelineLabels[p], total: phaseItems.length, done, pct: phaseItems.length > 0 ? Math.round((done / phaseItems.length) * 100) : 0 };
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold">100-Day Integration Plan</h2>
+        <span className="text-sm font-mono" style={{ color: pct >= 80 ? 'var(--success)' : pct >= 40 ? 'var(--warning)' : 'var(--muted-foreground)' }}>
+          {completed}/{total} ({pct}%)
+        </span>
+      </div>
+
+      {/* Progress by phase */}
+      <div className="glass-card p-4 grid grid-cols-5 gap-3">
+        {phaseProgress.map(p => (
+          <button
+            key={p.key}
+            onClick={() => setFilterTimeline(filterTimeline === p.key ? 'all' : p.key)}
+            className="text-center p-2 rounded-lg transition-colors"
+            style={{ background: filterTimeline === p.key ? `${timelineColors[p.key]}15` : 'var(--background)' }}
+          >
+            <div className="text-lg font-bold font-mono" style={{ color: p.pct === 100 ? 'var(--success)' : timelineColors[p.key] }}>
+              {p.pct}%
+            </div>
+            <div className="text-[10px] font-medium" style={{ color: 'var(--muted-foreground)' }}>{p.label}</div>
+            <div className="text-[10px]" style={{ color: 'var(--muted)' }}>{p.done}/{p.total}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-3">
+        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="text-sm">
+          <option value="all">All Categories</option>
+          {categories.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={filterTimeline} onChange={e => setFilterTimeline(e.target.value)} className="text-sm">
+          <option value="all">All Timelines</option>
+          {phases.map(p => <option key={p} value={p}>{timelineLabels[p]}</option>)}
+        </select>
+        <span className="text-xs ml-auto" style={{ color: 'var(--muted)' }}>
+          {filtered.filter(i => i.completed).length}/{filtered.length} shown items complete
+        </span>
+      </div>
+
+      {/* Checklist grouped by category */}
+      <div className="space-y-4">
+        {categories
+          .filter(cat => filterCategory === 'all' || cat === filterCategory)
+          .map(cat => {
+            const catItems = filtered.filter(i => i.category === cat);
+            if (catItems.length === 0) return null;
+            const catDone = catItems.filter(i => i.completed).length;
+            return (
+              <div key={cat} className="glass-card p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold">{cat}</h3>
+                  <span className="text-xs font-mono" style={{ color: catDone === catItems.length ? 'var(--success)' : 'var(--muted)' }}>
+                    {catDone}/{catItems.length}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  {catItems.map(item => (
+                    <div key={item.id} className="flex items-start gap-2 p-1.5 rounded transition-colors" style={{ opacity: item.completed ? 0.6 : 1 }}>
+                      <button onClick={() => toggle(item.id)} className="mt-0.5 flex-shrink-0">
+                        {item.completed
+                          ? <CheckCircle2 size={16} style={{ color: 'var(--success)' }} />
+                          : <div className="w-4 h-4 rounded-full border-2" style={{ borderColor: 'var(--border)' }} />
+                        }
+                      </button>
+                      <span className="text-sm flex-1" style={{ textDecoration: item.completed ? 'line-through' : undefined }}>
+                        {item.task}
+                      </span>
+                      <span className="badge text-[9px] flex-shrink-0" style={{ background: `${timelineColors[item.timeline]}15`, color: timelineColors[item.timeline] }}>
+                        {timelineLabels[item.timeline]}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
       </div>
     </div>
   );
