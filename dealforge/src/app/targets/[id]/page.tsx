@@ -196,6 +196,49 @@ export default function TargetDetailPage() {
         <MetricCard label="Score" value={target.weighted_score?.toFixed(1) || '-'} highlight />
       </div>
 
+      {/* Implied Multiples (shown when asking price exists) */}
+      {target.asking_price && (target.revenue || target.arr || target.ebita) && (
+        <div className="glass-card p-4">
+          <div className="text-xs font-medium mb-3" style={{ color: 'var(--muted-foreground)' }}>
+            Implied Multiples (Asking: ${(target.asking_price / 1000000).toFixed(1)}M)
+          </div>
+          <div className="flex items-center gap-6">
+            {target.revenue && (
+              <div className="text-center">
+                <div className="text-lg font-bold font-mono" style={{ color: 'var(--accent)' }}>
+                  {(target.asking_price / target.revenue).toFixed(1)}x
+                </div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>EV/Revenue</div>
+              </div>
+            )}
+            {target.arr && (
+              <div className="text-center">
+                <div className="text-lg font-bold font-mono" style={{ color: 'var(--accent)' }}>
+                  {(target.asking_price / target.arr).toFixed(1)}x
+                </div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>EV/ARR</div>
+              </div>
+            )}
+            {target.ebita && target.ebita > 0 && (
+              <div className="text-center">
+                <div className="text-lg font-bold font-mono" style={{ color: 'var(--accent)' }}>
+                  {(target.asking_price / target.ebita).toFixed(1)}x
+                </div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>EV/EBITA</div>
+              </div>
+            )}
+            {target.revenue && target.employee_count && target.employee_count > 0 && (
+              <div className="text-center">
+                <div className="text-lg font-bold font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                  ${Math.round(target.revenue / target.employee_count / 1000)}K
+                </div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>Rev/Employee</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Description & Notes */}
       {(target.description || target.notes) && (
         <div className="glass-card p-4">
@@ -274,12 +317,25 @@ export default function TargetDetailPage() {
                     </div>
                     {tp.summary && <p className="text-sm mt-2" style={{ color: 'var(--muted-foreground)' }}>{tp.summary}</p>}
                     {tp.participants && <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Participants: {tp.participants}</p>}
-                    {tp.follow_up_date && (
-                      <div className="text-xs mt-2 p-2 rounded" style={{ background: 'var(--background)', color: 'var(--warning)' }}>
-                        Follow-up: {new Date(tp.follow_up_date).toLocaleDateString()}
-                        {tp.follow_up_notes && ` — ${tp.follow_up_notes}`}
-                      </div>
-                    )}
+                    {tp.follow_up_date && (() => {
+                      const isOverdue = new Date(tp.follow_up_date).getTime() < Date.now();
+                      const daysUntil = Math.floor((new Date(tp.follow_up_date).getTime() - Date.now()) / 86400000);
+                      return (
+                        <div className="text-xs mt-2 p-2 rounded flex items-center gap-2" style={{
+                          background: isOverdue ? 'rgba(239,68,68,0.1)' : 'var(--background)',
+                          color: isOverdue ? 'var(--danger)' : 'var(--warning)',
+                        }}>
+                          <Calendar size={12} />
+                          <span className="font-medium">
+                            {isOverdue ? `Overdue by ${Math.abs(daysUntil)}d` : daysUntil === 0 ? 'Due today' : `Due in ${daysUntil}d`}
+                          </span>
+                          <span style={{ color: 'var(--muted-foreground)' }}>
+                            {new Date(tp.follow_up_date).toLocaleDateString()}
+                            {tp.follow_up_notes && ` — ${tp.follow_up_notes}`}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}
