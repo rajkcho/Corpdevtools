@@ -152,6 +152,18 @@ export default function DDProjectDetailPage() {
           >
             <CheckCircle2 size={14} /> Export Checklist
           </button>
+          <button
+            onClick={async () => {
+              const { generateDDStatusReport } = await import('@/lib/dd-status-report');
+              const html = generateDDStatusReport(id);
+              if (!html) return;
+              const win = window.open('', '_blank');
+              if (win) { win.document.write(html); win.document.close(); }
+            }}
+            className="btn btn-primary btn-sm"
+          >
+            <FileText size={14} /> Status Report
+          </button>
         </div>
       </div>
 
