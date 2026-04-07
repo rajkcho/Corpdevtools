@@ -367,6 +367,15 @@ export interface JournalEntry {
   updated_at: string;
 }
 
+export interface StageHistoryEntry {
+  id: string;
+  target_id: string;
+  from_stage: DealStage;
+  to_stage: DealStage;
+  changed_at: string;
+  notes?: string;
+}
+
 export interface DealTerm {
   id: string;
   target_id: string;

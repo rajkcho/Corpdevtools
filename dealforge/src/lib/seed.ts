@@ -3,7 +3,7 @@
 // Generates realistic sample data for testing and demos
 // ============================================================
 
-import { createTarget, createTouchpoint, createContact, createDDProject, createDDRisk, createDDFinding, createInfoRequest, populateDDTemplates, createDealTerm, createJournalEntry } from './db';
+import { createTarget, createTouchpoint, createContact, createDDProject, createDDRisk, createDDFinding, createInfoRequest, populateDDTemplates, createDealTerm, createJournalEntry, recordStageChange } from './db';
 import type { DealStage, Vertical } from './types';
 
 const SAMPLE_TARGETS: {
@@ -279,6 +279,65 @@ export function seedDemoData(): void {
         follow_up_notes: 'Send industry report and schedule next check-in',
       });
     }
+  }
+
+  // Seed stage history for targets that have progressed
+  const stageProgression: Record<string, DealStage[]> = {
+    'MedChart Systems': ['identified', 'researching', 'contacted', 'nurturing'],
+    'CivicTrack Pro': ['identified', 'researching', 'contacted', 'nurturing', 'loi_submitted'],
+    'SchoolBridge ERP': ['identified', 'researching', 'contacted', 'nurturing', 'loi_submitted', 'loi_signed', 'due_diligence'],
+    'PolicyHub': ['identified', 'researching', 'contacted'],
+    'TransitOps': ['identified', 'researching'],
+  };
+
+  for (const [name, stages] of Object.entries(stageProgression)) {
+    const idx = SAMPLE_TARGETS.findIndex(t => t.name === name);
+    if (idx < 0) continue;
+    const tid = targetIds[idx];
+    for (let i = 0; i < stages.length - 1; i++) {
+      recordStageChange(tid, stages[i], stages[i + 1]);
+    }
+  }
+
+  // Add more contacts for key targets
+  const contactsToAdd = [
+    { targetName: 'CivicTrack Pro', contacts: [
+      { name: 'Robert Mitchell', title: 'Founder & CEO', is_primary: true, email: 'rmitchell@civictrack.example.com', phone: '(404) 555-0102' },
+      { name: 'Lisa Washington', title: 'VP Sales', email: 'lwashington@civictrack.example.com' },
+      { name: 'Tom Baker', title: 'CFO', email: 'tbaker@civictrack.example.com' },
+    ]},
+    { targetName: 'SchoolBridge ERP', contacts: [
+      { name: 'Amanda Torres', title: 'CEO', is_primary: true, email: 'atorres@schoolbridge.example.com' },
+      { name: 'Kevin O\'Brien', title: 'CTO', email: 'kobrien@schoolbridge.example.com' },
+    ]},
+    { targetName: 'PolicyHub', contacts: [
+      { name: 'Mark Stern', title: 'Managing Director', is_primary: true, email: 'mstern@policyhub.example.com' },
+    ]},
+  ];
+
+  for (const { targetName, contacts } of contactsToAdd) {
+    const idx = SAMPLE_TARGETS.findIndex(t => t.name === targetName);
+    if (idx < 0) continue;
+    for (const c of contacts) {
+      createContact({ target_id: targetIds[idx], ...c });
+    }
+  }
+
+  // Add tags to some targets
+  // Tags are added via updateTarget import is not available here, so we handle via localStorage directly
+  if (typeof window !== 'undefined') {
+    const targets = JSON.parse(localStorage.getItem('dealforge_targets') || '[]');
+    const tagMap: Record<string, string[]> = {
+      'MedChart Systems': ['healthcare', 'high-priority', 'succession-play'],
+      'CivicTrack Pro': ['govtech', 'consolidation-play', 'high-priority'],
+      'SchoolBridge ERP': ['edtech', 'in-dd', 'platform'],
+      'PolicyHub': ['insurtech', 'broker-deal'],
+      'TransitOps': ['transportation', 'long-term-nurture'],
+    };
+    for (const t of targets) {
+      if (tagMap[t.name]) t.tags = tagMap[t.name];
+    }
+    localStorage.setItem('dealforge_targets', JSON.stringify(targets));
   }
 }
 

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import {
-  getTarget, getTargets, updateTarget, deleteTarget,
+  getTarget, getTargets, updateTarget, deleteTarget, getStageHistory,
   getTouchpoints, createTouchpoint, deleteTouchpoint,
   getMeetingNotes, createMeetingNote, deleteMeetingNote,
   getContacts, createContact, updateContact, deleteContact,
@@ -413,6 +413,48 @@ export default function TargetDetailPage() {
               ))}
             </div>
           )}
+
+          {/* Stage Progression History */}
+          {(() => {
+            const history = getStageHistory(id);
+            if (history.length === 0) return null;
+            return (
+              <div className="glass-card p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--muted-foreground)' }}>
+                  Stage Progression
+                </h3>
+                <div className="space-y-2">
+                  {history.map((h, i) => {
+                    const fromStage = DEAL_STAGES.find(s => s.key === h.from_stage);
+                    const toStage = DEAL_STAGES.find(s => s.key === h.to_stage);
+                    const daysAgo = Math.floor((Date.now() - new Date(h.changed_at).getTime()) / 86400000);
+                    const daysInPrevStage = i > 0
+                      ? Math.floor((new Date(h.changed_at).getTime() - new Date(history[i - 1].changed_at).getTime()) / 86400000)
+                      : Math.floor((new Date(h.changed_at).getTime() - new Date(target.created_at).getTime()) / 86400000);
+                    return (
+                      <div key={h.id} className="flex items-center gap-3 text-xs">
+                        <span className="w-16 font-mono text-right flex-shrink-0" style={{ color: 'var(--muted)' }}>
+                          {daysAgo === 0 ? 'Today' : `${daysAgo}d ago`}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="badge" style={{ background: `${fromStage?.color}20`, color: fromStage?.color }}>
+                            {fromStage?.label}
+                          </span>
+                          <span style={{ color: 'var(--muted)' }}>→</span>
+                          <span className="badge" style={{ background: `${toStage?.color}20`, color: toStage?.color }}>
+                            {toStage?.label}
+                          </span>
+                        </div>
+                        <span className="font-mono" style={{ color: 'var(--muted)' }}>
+                          {daysInPrevStage}d in stage
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

@@ -10,7 +10,7 @@ import type {
   InformationRequest, DDDocument, ApprovalGate,
   DealStage, DealScore, DDStatus, RAGStatus,
   ActivityEntry, ActivityType, DealTerm, JournalEntry,
-  DDWorkstreamComment,
+  DDWorkstreamComment, StageHistoryEntry,
 } from './types';
 import { SCORE_CRITERIA, DD_WORKSTREAMS } from './types';
 import { DD_TASK_TEMPLATES } from './dd-templates';
@@ -88,6 +88,8 @@ export function updateTarget(id: string, data: Partial<Target>): Target | undefi
 
   if (stageChanged) {
     logActivity('stage_changed', `${prev.name}: ${prev.stage} → ${data.stage}`, { target_id: id, target_name: prev.name, metadata: { from: prev.stage, to: data.stage! } });
+    // Record stage history
+    recordStageChange(id, prev.stage, data.stage!);
   } else if (!data.score) {
     logActivity('target_updated', `Updated target: ${prev.name}`, { target_id: id, target_name: prev.name });
   }
@@ -787,6 +789,28 @@ export function updateJournalEntry(id: string, data: Partial<JournalEntry>): voi
 
 export function deleteJournalEntry(id: string): void {
   setStore('journal_entries', getStore<JournalEntry>('journal_entries').filter(j => j.id !== id));
+}
+
+// --- Stage History ---
+
+export function getStageHistory(targetId: string): StageHistoryEntry[] {
+  const all = getStore<StageHistoryEntry>('stage_history');
+  return all
+    .filter(sh => sh.target_id === targetId)
+    .sort((a, b) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime());
+}
+
+export function recordStageChange(targetId: string, fromStage: DealStage, toStage: DealStage, notes?: string): void {
+  const history = getStore<StageHistoryEntry>('stage_history');
+  history.push({
+    id: uuidv4(),
+    target_id: targetId,
+    from_stage: fromStage,
+    to_stage: toStage,
+    changed_at: now(),
+    notes,
+  });
+  setStore('stage_history', history);
 }
 
 // --- DD Workstream Comments ---
