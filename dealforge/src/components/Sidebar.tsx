@@ -16,6 +16,8 @@ import {
   Search,
   Mail,
   Bell,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { getNotificationCounts, getAlerts, type NotificationCounts, type Alert } from '@/lib/notifications';
@@ -35,6 +37,7 @@ const NAV_ITEMS = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [counts, setCounts] = useState<NotificationCounts>({ staleDeals: 0, overdueFollowUps: 0, overdueIRLs: 0, activeDD: 0, total: 0 });
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [showAlerts, setShowAlerts] = useState(false);
@@ -45,6 +48,21 @@ export default function Sidebar() {
     const interval = setInterval(() => { setCounts(getNotificationCounts()); setAlerts(getAlerts()); }, 60000);
     return () => clearInterval(interval);
   }, [pathname]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('dealforge_theme') as 'dark' | 'light' | null;
+    if (saved) {
+      setTheme(saved);
+      document.documentElement.setAttribute('data-theme', saved);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('dealforge_theme', next);
+  };
 
   return (
     <aside
@@ -161,6 +179,18 @@ export default function Sidebar() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Theme toggle */}
+      <div className="px-3 pb-1">
+        <button
+          onClick={toggleTheme}
+          className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors"
+          style={{ background: 'var(--background)', color: 'var(--muted)' }}
+        >
+          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+          {!collapsed && <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
+        </button>
       </div>
 
       {/* Collapse toggle */}
