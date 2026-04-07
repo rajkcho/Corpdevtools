@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, List, KanbanSquare, GripVertical, CheckSquare, Square, Trash2, ArrowRight, ChevronRight, ChevronLeft, X, MoreVertical, XCircle, Star, Eye } from 'lucide-react';
+import { Plus, List, KanbanSquare, GripVertical, CheckSquare, Square, Trash2, ArrowRight, ChevronRight, ChevronLeft, X, MoreVertical, XCircle, Star, Eye, Calendar } from 'lucide-react';
 import Link from 'next/link';
 import { getTargets, createTarget, updateTarget, deleteTarget } from '@/lib/db';
 import { DEAL_STAGES } from '@/lib/types';
@@ -11,7 +11,7 @@ import TargetForm from '@/components/TargetForm';
 
 export default function PipelinePage() {
   const [targets, setTargets] = useState<Target[]>([]);
-  const [view, setView] = useState<'kanban' | 'list'>('kanban');
+  const [view, setView] = useState<'kanban' | 'list' | 'timeline'>('kanban');
   const [showAddModal, setShowAddModal] = useState(false);
   const [dragTarget, setDragTarget] = useState<string | null>(null);
   const [filterVertical, setFilterVertical] = useState<string>('all');
@@ -161,6 +161,13 @@ export default function PipelinePage() {
               style={{ background: view === 'list' ? 'var(--accent)' : 'var(--card)', color: view === 'list' ? 'white' : 'var(--muted-foreground)' }}
             >
               <List size={14} />
+            </button>
+            <button
+              onClick={() => setView('timeline')}
+              className="btn btn-sm"
+              style={{ background: view === 'timeline' ? 'var(--accent)' : 'var(--card)', color: view === 'timeline' ? 'white' : 'var(--muted-foreground)' }}
+            >
+              <Calendar size={14} />
             </button>
           </div>
           <button onClick={() => setShowAddModal(true)} className="btn btn-primary btn-sm">
@@ -432,6 +439,136 @@ export default function PipelinePage() {
           </table>
         </div>
       )}
+
+      {/* Timeline View */}
+      {view === 'timeline' && (() => {
+        const activeTargets = filteredTargets
+          .filter(t => !['closed_lost'].includes(t.stage))
+          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+        if (activeTargets.length === 0) {
+          return (
+            <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--muted)' }}>
+              <p className="text-sm">No targets to display in timeline.</p>
+            </div>
+          );
+        }
+
+        // Time range: oldest created to now
+        const now = Date.now();
+        const oldestCreated = Math.min(...activeTargets.map(t => new Date(t.created_at).getTime()));
+        const timeRange = now - oldestCreated;
+        const monthMs = 30 * 24 * 60 * 60 * 1000;
+
+        // Generate month markers
+        const months: { label: string; position: number }[] = [];
+        const startDate = new Date(oldestCreated);
+        startDate.setDate(1);
+        let currentMonth = new Date(startDate);
+        while (currentMonth.getTime() <= now) {
+          const pos = timeRange > 0 ? ((currentMonth.getTime() - oldestCreated) / timeRange) * 100 : 0;
+          months.push({
+            label: currentMonth.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+            position: Math.max(0, Math.min(100, pos)),
+          });
+          currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+        }
+
+        return (
+          <div className="glass-card flex-1 overflow-auto p-4">
+            {/* Month header */}
+            <div className="relative h-6 mb-2" style={{ marginLeft: 160 }}>
+              {months.map((m, i) => (
+                <div key={i} className="absolute text-[10px]" style={{ left: `${m.position}%`, color: 'var(--muted)', transform: 'translateX(-50%)' }}>
+                  {m.label}
+                </div>
+              ))}
+            </div>
+
+            {/* Grid lines */}
+            <div className="space-y-1">
+              {activeTargets.map(t => {
+                const stageConfig = DEAL_STAGES.find(s => s.key === t.stage);
+                const stageIdx = DEAL_STAGES.findIndex(s => s.key === t.stage);
+                const createdPos = timeRange > 0 ? ((new Date(t.created_at).getTime() - oldestCreated) / timeRange) * 100 : 0;
+                const stageEnteredPos = timeRange > 0 ? ((new Date(t.stage_entered_at).getTime() - oldestCreated) / timeRange) * 100 : 0;
+                const nowPos = 100;
+                const daysInStage = Math.floor((now - new Date(t.stage_entered_at).getTime()) / 86400000);
+                const daysTotal = Math.floor((now - new Date(t.created_at).getTime()) / 86400000);
+                const stale = daysInStage > 30 && !['closed_won', 'closed_lost'].includes(t.stage);
+
+                return (
+                  <Link key={t.id} href={`/targets/${t.id}`} className="flex items-center gap-0 group" style={{ height: 28 }}>
+                    {/* Target name */}
+                    <div className="w-40 flex-shrink-0 flex items-center gap-1.5 pr-2">
+                      <span className="text-xs font-medium truncate group-hover:underline" style={{ color: 'var(--foreground)' }}>
+                        {t.name}
+                      </span>
+                    </div>
+                    {/* Timeline bar */}
+                    <div className="flex-1 relative h-full">
+                      {/* Background gridlines */}
+                      {months.map((m, i) => (
+                        <div key={i} className="absolute top-0 bottom-0 w-px" style={{ left: `${m.position}%`, background: 'var(--border)', opacity: 0.3 }} />
+                      ))}
+                      {/* Bar: from created to now */}
+                      <div
+                        className="absolute top-1 bottom-1 rounded-sm flex items-center overflow-hidden"
+                        style={{
+                          left: `${createdPos}%`,
+                          width: `${Math.max(0.5, nowPos - createdPos)}%`,
+                          background: `${stageConfig?.color}30`,
+                          border: `1px solid ${stageConfig?.color}60`,
+                        }}
+                      >
+                        {/* Stage entered marker */}
+                        {stageEnteredPos > createdPos + 2 && (
+                          <div
+                            className="absolute top-0 bottom-0 w-0.5"
+                            style={{
+                              left: `${((stageEnteredPos - createdPos) / (nowPos - createdPos)) * 100}%`,
+                              background: stageConfig?.color,
+                              opacity: 0.5,
+                            }}
+                          />
+                        )}
+                        {/* Label inside bar */}
+                        <span className="text-[9px] font-medium px-1.5 truncate whitespace-nowrap" style={{ color: stageConfig?.color }}>
+                          {stageConfig?.label} · {daysTotal}d
+                          {stale && ' ⚠'}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Score */}
+                    <div className="w-12 flex-shrink-0 text-right">
+                      {t.weighted_score ? (
+                        <span className="text-[10px] font-mono font-bold" style={{
+                          color: t.weighted_score >= 4 ? 'var(--success)' : t.weighted_score >= 3 ? 'var(--warning)' : 'var(--danger)',
+                        }}>
+                          {t.weighted_score.toFixed(1)}
+                        </span>
+                      ) : (
+                        <span className="text-[10px]" style={{ color: 'var(--muted)' }}>—</span>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* Legend */}
+            <div className="flex items-center gap-3 mt-4 pt-3 border-t flex-wrap" style={{ borderColor: 'var(--border)' }}>
+              {DEAL_STAGES.filter(s => filteredTargets.some(t => t.stage === s.key)).map(s => (
+                <div key={s.key} className="flex items-center gap-1 text-[10px]">
+                  <div className="w-3 h-2 rounded-sm" style={{ background: `${s.color}50`, border: `1px solid ${s.color}` }} />
+                  <span style={{ color: 'var(--muted)' }}>{s.label}</span>
+                </div>
+              ))}
+              <span className="text-[10px] ml-auto" style={{ color: 'var(--muted)' }}>⚠ = stale ({'>'}30d in stage)</span>
+            </div>
+          </div>
+        );
+      })()}
 
       <Modal open={showAddModal} onClose={() => setShowAddModal(false)} title="Add Target" width="max-w-2xl">
         <TargetForm onSubmit={handleAdd} onCancel={() => setShowAddModal(false)} submitLabel="Create Target" />
