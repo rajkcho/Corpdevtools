@@ -458,6 +458,44 @@ function WorkstreamSection({ workstream, expanded, onToggle, onReload }: {
             </div>
           </div>
 
+          {/* Batch actions */}
+          {tasks.length > 0 && (
+            <div className="flex items-center gap-2 mb-3">
+              <button
+                onClick={() => {
+                  for (const t of tasks) updateDDTask(t.id, { status: 'complete' });
+                  refreshTasks();
+                }}
+                className="btn btn-ghost btn-sm"
+                style={{ fontSize: '0.65rem' }}
+              >
+                <CheckCircle2 size={12} /> Mark All Complete
+              </button>
+              <button
+                onClick={() => {
+                  for (const t of tasks) updateDDTask(t.id, { status: 'not_started' });
+                  refreshTasks();
+                }}
+                className="btn btn-ghost btn-sm"
+                style={{ fontSize: '0.65rem' }}
+              >
+                <Circle size={12} /> Reset All
+              </button>
+              <button
+                onClick={() => {
+                  for (const t of tasks) {
+                    if (t.status === 'not_started') updateDDTask(t.id, { status: 'n_a' });
+                  }
+                  refreshTasks();
+                }}
+                className="btn btn-ghost btn-sm"
+                style={{ fontSize: '0.65rem' }}
+              >
+                <Ban size={12} /> Mark Remaining N/A
+              </button>
+            </div>
+          )}
+
           {/* Hierarchical task groups */}
           <div className="space-y-3">
             {parentTasks.map(parent => {

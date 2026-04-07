@@ -33,9 +33,28 @@ export default function TargetForm({ initial, onSubmit, onCancel, submitLabel = 
   );
 
   const [tab, setTab] = useState<'basic' | 'financials' | 'contacts' | 'scoring'>('basic');
+  const [errors, setErrors] = useState<string[]>([]);
+
+  const validate = (): string[] => {
+    const errs: string[] = [];
+    if (!form.name?.trim()) errs.push('Company name is required');
+    if (form.recurring_revenue_pct !== undefined && (form.recurring_revenue_pct < 0 || form.recurring_revenue_pct > 100)) errs.push('Recurring revenue % must be 0-100');
+    if (form.gross_margin_pct !== undefined && (form.gross_margin_pct < 0 || form.gross_margin_pct > 100)) errs.push('Gross margin % must be 0-100');
+    if (form.ebita_margin_pct !== undefined && (form.ebita_margin_pct < 0 || form.ebita_margin_pct > 100)) errs.push('EBITA margin % must be 0-100');
+    if (form.revenue !== undefined && form.revenue < 0) errs.push('Revenue cannot be negative');
+    if (form.arr !== undefined && form.arr < 0) errs.push('ARR cannot be negative');
+    if (form.asking_price !== undefined && form.asking_price < 0) errs.push('Asking price cannot be negative');
+    return errs;
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const errs = validate();
+    if (errs.length > 0) {
+      setErrors(errs);
+      return;
+    }
+    setErrors([]);
     onSubmit({ ...form, score });
   };
 
@@ -235,6 +254,13 @@ export default function TargetForm({ initial, onSubmit, onCancel, submitLabel = 
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Validation Errors */}
+      {errors.length > 0 && (
+        <div className="p-3 rounded-lg text-sm" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}>
+          {errors.map((err, i) => <div key={i}>{err}</div>)}
         </div>
       )}
 
