@@ -578,6 +578,16 @@ function WorkstreamSection({ workstream, expanded, onToggle, onReload }: {
                                 </p>
                               )}
                             </div>
+                            {task.due_date && (
+                              <span className="text-xs flex-shrink-0" style={{
+                                color: new Date(task.due_date) < new Date() && task.status !== 'complete' ? 'var(--danger)' : 'var(--muted)',
+                              }}>
+                                {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                              </span>
+                            )}
+                            {task.owner && (
+                              <span className="text-xs flex-shrink-0 truncate" style={{ color: 'var(--muted)', maxWidth: 60 }}>{task.owner}</span>
+                            )}
                             <span className="badge flex-shrink-0" style={{
                               background: task.priority === 'critical' ? 'rgba(239,68,68,0.15)' : task.priority === 'high' ? 'rgba(245,158,11,0.15)' : 'transparent',
                               color: task.priority === 'critical' ? 'var(--danger)' : task.priority === 'high' ? 'var(--warning)' : 'var(--muted)',

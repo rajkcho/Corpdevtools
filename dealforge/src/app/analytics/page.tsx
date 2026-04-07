@@ -273,6 +273,59 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
+      {/* Financial Benchmarks */}
+      {targets.length > 0 && (
+        <div className="glass-card p-5">
+          <h2 className="font-semibold mb-4">Financial Benchmarks (Portfolio Average)</h2>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {(() => {
+              const withRecurring = targets.filter(t => t.recurring_revenue_pct);
+              const withMargin = targets.filter(t => t.gross_margin_pct);
+              const withEbita = targets.filter(t => t.ebita_margin_pct);
+              const withGrowth = targets.filter(t => t.yoy_growth_pct);
+              const withCustomers = targets.filter(t => t.customer_count);
+              return (
+                <>
+                  <div className="text-center p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+                    <div className="text-lg font-bold font-mono" style={{ color: withRecurring.length > 0 && (withRecurring.reduce((s, t) => s + (t.recurring_revenue_pct || 0), 0) / withRecurring.length) >= 80 ? 'var(--success)' : 'var(--warning)' }}>
+                      {withRecurring.length > 0 ? `${Math.round(withRecurring.reduce((s, t) => s + (t.recurring_revenue_pct || 0), 0) / withRecurring.length)}%` : '—'}
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--muted)' }}>Avg Recurring Rev</div>
+                    <div className="text-xs" style={{ color: 'var(--muted)', fontSize: '0.6rem' }}>Target: 80%+</div>
+                  </div>
+                  <div className="text-center p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+                    <div className="text-lg font-bold font-mono" style={{ color: withMargin.length > 0 && (withMargin.reduce((s, t) => s + (t.gross_margin_pct || 0), 0) / withMargin.length) >= 70 ? 'var(--success)' : 'var(--warning)' }}>
+                      {withMargin.length > 0 ? `${Math.round(withMargin.reduce((s, t) => s + (t.gross_margin_pct || 0), 0) / withMargin.length)}%` : '—'}
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--muted)' }}>Avg Gross Margin</div>
+                    <div className="text-xs" style={{ color: 'var(--muted)', fontSize: '0.6rem' }}>Target: 70%+</div>
+                  </div>
+                  <div className="text-center p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+                    <div className="text-lg font-bold font-mono" style={{ color: withEbita.length > 0 && (withEbita.reduce((s, t) => s + (t.ebita_margin_pct || 0), 0) / withEbita.length) >= 20 ? 'var(--success)' : 'var(--warning)' }}>
+                      {withEbita.length > 0 ? `${Math.round(withEbita.reduce((s, t) => s + (t.ebita_margin_pct || 0), 0) / withEbita.length)}%` : '—'}
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--muted)' }}>Avg EBITA Margin</div>
+                    <div className="text-xs" style={{ color: 'var(--muted)', fontSize: '0.6rem' }}>Target: 20%+</div>
+                  </div>
+                  <div className="text-center p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+                    <div className="text-lg font-bold font-mono">
+                      {withGrowth.length > 0 ? `${Math.round(withGrowth.reduce((s, t) => s + (t.yoy_growth_pct || 0), 0) / withGrowth.length)}%` : '—'}
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--muted)' }}>Avg YoY Growth</div>
+                  </div>
+                  <div className="text-center p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+                    <div className="text-lg font-bold font-mono">
+                      {withCustomers.length > 0 ? Math.round(withCustomers.reduce((s, t) => s + (t.customer_count || 0), 0) / withCustomers.length).toLocaleString() : '—'}
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--muted)' }}>Avg Customer Count</div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* Conversion funnel */}
       <div className="glass-card p-5">
         <h2 className="font-semibold mb-4">Pipeline Funnel</h2>
