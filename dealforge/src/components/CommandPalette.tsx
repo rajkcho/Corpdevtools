@@ -28,6 +28,7 @@ const PAGES: SearchResult[] = [
   { id: 'portfolio', type: 'page', label: 'Portfolio', href: '/portfolio', icon: <Building2 size={16} /> },
   { id: 'reports', type: 'page', label: 'Deal Flow Reports', href: '/reports', icon: <FileSearch size={16} /> },
   { id: 'market-map', type: 'page', label: 'Market Map', href: '/market-map', icon: <Map size={16} /> },
+  { id: 'benchmarks', type: 'page', label: 'VMS Benchmarks', href: '/benchmarks', icon: <BarChart3 size={16} /> },
   { id: 'activity', type: 'page', label: 'Activity Feed', href: '/activity', icon: <Clock size={16} /> },
   { id: 'settings', type: 'page', label: 'Settings', href: '/settings', icon: <Settings size={16} /> },
 ];

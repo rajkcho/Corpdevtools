@@ -39,6 +39,7 @@ const NAV_ITEMS = [
   { href: '/reports', label: 'Reports', icon: FileText },
   { href: '/market-map', label: 'Market Map', icon: Map },
   { href: '/valuation', label: 'Valuation', icon: Calculator },
+  { href: '/benchmarks', label: 'Benchmarks', icon: BarChart3 },
   { href: '/diligence', label: 'Due Diligence', icon: FileSearch },
   { href: '/activity', label: 'Activity', icon: Clock },
   { href: '/settings', label: 'Settings', icon: Settings },
