@@ -616,6 +616,117 @@ export default function DashboardPage() {
         );
       })()}
 
+      {/* Deal Health Scorecard */}
+      {activeTargets.length > 0 && (() => {
+        const dealHealth = activeTargets
+          .filter(t => !['identified'].includes(t.stage))
+          .map(t => {
+            const daysInStage = Math.floor((Date.now() - new Date(t.stage_entered_at).getTime()) / 86400000);
+            const tps = touchpoints.filter(tp => tp.target_id === t.id);
+            const lastTouchpoint = tps.length > 0 ? tps.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] : null;
+            const daysSinceContact = lastTouchpoint ? Math.floor((Date.now() - new Date(lastTouchpoint.date).getTime()) / 86400000) : null;
+            const contacts = allContacts.filter(c => c.target_id === t.id);
+            const dd = ddProjects.find(p => p.target_id === t.id);
+            const targetRisks = risks.filter(r => dd && r.project_id === dd.id && r.status === 'open');
+
+            // Score components (0-100 each)
+            let momentum = 100;
+            if (daysInStage > 60) momentum -= 50;
+            else if (daysInStage > 30) momentum -= 25;
+            if (daysSinceContact === null) momentum -= 30;
+            else if (daysSinceContact > 30) momentum -= 40;
+            else if (daysSinceContact > 14) momentum -= 20;
+            momentum = Math.max(0, momentum);
+
+            let completeness = 0;
+            if (t.weighted_score) completeness += 25;
+            if (contacts.length > 0) completeness += 25;
+            if (t.revenue || t.arr) completeness += 25;
+            if (tps.length >= 2) completeness += 25;
+
+            let riskLevel = 100;
+            if (targetRisks.length > 0) riskLevel -= targetRisks.length * 15;
+            if (dd?.rag_status === 'red') riskLevel -= 30;
+            else if (dd?.rag_status === 'amber') riskLevel -= 15;
+            riskLevel = Math.max(0, riskLevel);
+
+            const overall = Math.round((momentum * 0.4 + completeness * 0.3 + riskLevel * 0.3));
+            const healthColor = overall >= 70 ? 'var(--success)' : overall >= 40 ? 'var(--warning)' : 'var(--danger)';
+            const healthLabel = overall >= 70 ? 'Healthy' : overall >= 40 ? 'Needs Attention' : 'At Risk';
+
+            return { target: t, overall, momentum, completeness, riskLevel, healthColor, healthLabel, daysInStage, daysSinceContact };
+          })
+          .sort((a, b) => a.overall - b.overall);
+
+        if (dealHealth.length === 0) return null;
+
+        const avgHealth = Math.round(dealHealth.reduce((s, d) => s + d.overall, 0) / dealHealth.length);
+        const atRisk = dealHealth.filter(d => d.overall < 40).length;
+
+        return (
+          <div className="glass-card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold flex items-center gap-2">
+                <TrendingUp size={16} style={{ color: 'var(--accent)' }} /> Deal Health Scorecard
+              </h2>
+              <div className="flex items-center gap-3">
+                <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                  Avg Health: <span className="font-mono font-bold" style={{ color: avgHealth >= 70 ? 'var(--success)' : avgHealth >= 40 ? 'var(--warning)' : 'var(--danger)' }}>{avgHealth}</span>
+                </span>
+                {atRisk > 0 && (
+                  <span className="badge" style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--danger)' }}>
+                    {atRisk} at risk
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              {dealHealth.slice(0, 8).map(d => (
+                <Link key={d.target.id} href={`/targets/${d.target.id}`}
+                  className="flex items-center gap-3 p-2.5 rounded-lg text-sm transition-colors"
+                  style={{ background: 'var(--background)' }}
+                >
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                    style={{ background: `${d.healthColor}15`, color: d.healthColor, border: `2px solid ${d.healthColor}` }}
+                  >
+                    {d.overall}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{d.target.name}</div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px]" style={{ color: 'var(--muted)' }}>{d.healthLabel}</span>
+                      <span className="text-[10px]" style={{ color: 'var(--muted)' }}>·</span>
+                      <span className="text-[10px]" style={{ color: d.daysInStage > 30 ? 'var(--warning)' : 'var(--muted)' }}>{d.daysInStage}d in stage</span>
+                      {d.daysSinceContact !== null && (
+                        <>
+                          <span className="text-[10px]" style={{ color: 'var(--muted)' }}>·</span>
+                          <span className="text-[10px]" style={{ color: d.daysSinceContact > 14 ? 'var(--warning)' : 'var(--muted)' }}>{d.daysSinceContact}d since contact</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <div title="Momentum" className="w-8 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                      <div className="h-full rounded-full" style={{ width: `${d.momentum}%`, background: d.momentum >= 70 ? 'var(--success)' : d.momentum >= 40 ? 'var(--warning)' : 'var(--danger)' }} />
+                    </div>
+                    <div title="Completeness" className="w-8 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                      <div className="h-full rounded-full" style={{ width: `${d.completeness}%`, background: d.completeness >= 75 ? 'var(--success)' : d.completeness >= 50 ? 'var(--warning)' : 'var(--danger)' }} />
+                    </div>
+                    <div title="Risk Level" className="w-8 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                      <div className="h-full rounded-full" style={{ width: `${d.riskLevel}%`, background: d.riskLevel >= 70 ? 'var(--success)' : d.riskLevel >= 40 ? 'var(--warning)' : 'var(--danger)' }} />
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+            <div className="flex items-center gap-4 mt-3 text-[10px]" style={{ color: 'var(--muted)' }}>
+              <span>Bars: Momentum · Completeness · Risk</span>
+              <span>Score: 40% momentum + 30% completeness + 30% risk profile</span>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Upcoming Milestones Across All Targets */}
       {(() => {
         if (typeof window === 'undefined') return null;
