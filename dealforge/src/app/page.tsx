@@ -616,6 +616,47 @@ export default function DashboardPage() {
         );
       })()}
 
+      {/* Upcoming Milestones Across All Targets */}
+      {(() => {
+        if (typeof window === 'undefined') return null;
+        const allMilestones: { target: string; targetId: string; label: string; date: string; overdue: boolean }[] = [];
+        for (const t of activeTargets) {
+          const raw = localStorage.getItem(`dealforge_milestones_${t.id}`);
+          if (!raw) continue;
+          const ms = JSON.parse(raw);
+          for (const m of ms) {
+            if (m.completed || !m.target_date) continue;
+            const overdue = new Date(m.target_date).getTime() < Date.now();
+            allMilestones.push({ target: t.name, targetId: t.id, label: m.label, date: m.target_date, overdue });
+          }
+        }
+        if (allMilestones.length === 0) return null;
+        allMilestones.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        return (
+          <div className="glass-card p-5">
+            <h2 className="font-semibold mb-3 flex items-center gap-2">
+              <Calendar size={16} style={{ color: 'var(--accent)' }} /> Upcoming Milestones
+            </h2>
+            <div className="space-y-2">
+              {allMilestones.slice(0, 8).map((m, i) => {
+                const daysUntil = Math.floor((new Date(m.date).getTime() - Date.now()) / 86400000);
+                return (
+                  <Link key={i} href={`/targets/${m.targetId}`} className="flex items-center gap-3 p-2 rounded-lg text-sm" style={{ background: 'var(--background)' }}>
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: m.overdue ? 'var(--danger)' : daysUntil <= 7 ? 'var(--warning)' : 'var(--accent)' }} />
+                    <span className="font-medium flex-shrink-0 w-28 truncate">{m.target}</span>
+                    <span className="flex-1 truncate" style={{ color: 'var(--muted-foreground)' }}>{m.label}</span>
+                    <span className="text-xs font-mono flex-shrink-0" style={{ color: m.overdue ? 'var(--danger)' : daysUntil <= 7 ? 'var(--warning)' : 'var(--muted)' }}>
+                      {m.overdue ? `${Math.abs(daysUntil)}d overdue` : daysUntil === 0 ? 'Today' : `${daysUntil}d`}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Recent Activity */}
       <div className="glass-card p-5">
         <div className="flex items-center justify-between mb-4">

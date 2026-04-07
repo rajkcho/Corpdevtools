@@ -338,6 +338,56 @@ export function seedDemoData(): void {
       if (tagMap[t.name]) t.tags = tagMap[t.name];
     }
     localStorage.setItem('dealforge_targets', JSON.stringify(targets));
+
+    // Seed watchlist
+    const watchlistTargets = targets.filter((t: { name: string }) =>
+      ['CivicTrack Pro', 'SchoolBridge ERP', 'MedChart Systems'].includes(t.name)
+    );
+    localStorage.setItem('dealforge_watchlist', JSON.stringify(watchlistTargets.map((t: { id: string }) => t.id)));
+
+    // Seed deal thesis for CivicTrack Pro
+    const civicTrack = targets.find((t: { name: string }) => t.name === 'CivicTrack Pro');
+    if (civicTrack) {
+      localStorage.setItem(`dealforge_thesis_${civicTrack.id}`, JSON.stringify({
+        thesis: 'CivicTrack Pro is a compelling VMS acquisition target with strong recurring revenue (83%), high customer retention in the local government vertical, and mission-critical permitting software that has significant switching costs. The Southeast US market is fragmented with many small competitors, creating a consolidation opportunity. Post-acquisition, we can drive margin expansion through operational improvements and cross-sell additional modules to the existing 180-municipality customer base.',
+        risks: '1. Customer concentration: Top 10 municipalities represent ~25% of revenue - need to confirm diversification trend\n2. Technology stack may need modernization (currently on older .NET framework)\n3. Founder succession: Robert Mitchell has indicated 2-year transition willingness\n4. Regulatory changes in permitting could impact product relevance',
+      }));
+
+      // Seed competitors for CivicTrack Pro
+      localStorage.setItem(`dealforge_competitors_${civicTrack.id}`, JSON.stringify([
+        { id: crypto.randomUUID(), name: 'Tyler Technologies', type: 'direct', threat_level: 3, notes: 'Dominant player in govtech space, but focused on larger municipalities. CivicTrack serves the sub-50K population segment.' },
+        { id: crypto.randomUUID(), name: 'Accela', type: 'direct', threat_level: 2, notes: 'Strong in permitting but weaker in code enforcement. Higher price point.' },
+        { id: crypto.randomUUID(), name: 'CityGovApps', type: 'indirect', threat_level: 1, notes: 'Open-source alternative. Limited adoption due to support concerns.' },
+      ]));
+    }
+
+    // Seed thesis for SchoolBridge ERP
+    const schoolBridge = targets.find((t: { name: string }) => t.name === 'SchoolBridge ERP');
+    if (schoolBridge) {
+      localStorage.setItem(`dealforge_thesis_${schoolBridge.id}`, JSON.stringify({
+        thesis: 'SchoolBridge ERP is a best-in-class SIS platform for Western Canadian K-12 districts with 87% recurring revenue and 81% gross margins. The education vertical exhibits extremely low churn due to multi-year government procurement cycles. With 95 districts and a TAM of 400+ districts in Western Canada alone, significant growth runway remains. The product is deeply embedded in school operations (attendance, grading, scheduling, parent communications) creating very high switching costs.',
+        risks: '1. Provincial education budget cuts could delay new district adoption\n2. Two-person development team creates key-person risk on the CTO\n3. Competition from PowerSchool and Clever intensifying in Canadian market',
+      }));
+
+      // Seed milestones for SchoolBridge (in DD)
+      localStorage.setItem(`dealforge_milestones_${schoolBridge.id}`, JSON.stringify([
+        { id: crypto.randomUUID(), label: 'Initial Research Complete', category: 'research', completed: true, completed_at: '2026-01-15T00:00:00Z' },
+        { id: crypto.randomUUID(), label: 'First Contact Made', category: 'outreach', completed: true, completed_at: '2026-01-28T00:00:00Z' },
+        { id: crypto.randomUUID(), label: 'Management Meeting Scheduled', category: 'outreach', completed: true, completed_at: '2026-02-05T00:00:00Z' },
+        { id: crypto.randomUUID(), label: 'Management Meeting Complete', category: 'outreach', completed: true, completed_at: '2026-02-12T00:00:00Z' },
+        { id: crypto.randomUUID(), label: 'Financial Data Received', category: 'diligence', completed: true, completed_at: '2026-02-20T00:00:00Z' },
+        { id: crypto.randomUUID(), label: 'Valuation Model Complete', category: 'diligence', completed: true, completed_at: '2026-03-01T00:00:00Z' },
+        { id: crypto.randomUUID(), label: 'IC Memo Drafted', category: 'approval', completed: true, completed_at: '2026-03-05T00:00:00Z' },
+        { id: crypto.randomUUID(), label: 'IC Approval Obtained', category: 'approval', completed: true, completed_at: '2026-03-08T00:00:00Z' },
+        { id: crypto.randomUUID(), label: 'LOI Issued', category: 'deal', completed: true, completed_at: '2026-03-10T00:00:00Z' },
+        { id: crypto.randomUUID(), label: 'LOI Signed', category: 'deal', completed: true, completed_at: '2026-03-15T00:00:00Z' },
+        { id: crypto.randomUUID(), label: 'DD Kickoff', category: 'diligence', completed: true, completed_at: '2026-03-18T00:00:00Z' },
+        { id: crypto.randomUUID(), label: 'DD Complete', category: 'diligence', completed: false, target_date: '2026-04-20' },
+        { id: crypto.randomUUID(), label: 'SPA Drafted', category: 'legal', completed: false, target_date: '2026-04-25' },
+        { id: crypto.randomUUID(), label: 'SPA Executed', category: 'legal', completed: false, target_date: '2026-05-10' },
+        { id: crypto.randomUUID(), label: 'Closing', category: 'deal', completed: false, target_date: '2026-05-15' },
+      ]));
+    }
   }
 }
 
