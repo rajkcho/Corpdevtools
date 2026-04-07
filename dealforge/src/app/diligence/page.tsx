@@ -3,9 +3,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { FileSearch, Plus } from 'lucide-react';
 import Link from 'next/link';
-import { getDDProjects, getTargets, createDDProject, populateDDTemplates, getDDRisks, getDDFindings, getInfoRequests } from '@/lib/db';
+import { getDDProjects, getTargets, createDDProject, populateDDTemplates, getDDRisks, getDDFindings, getInfoRequests, getDDWorkstreams, getDDTasks } from '@/lib/db';
 import { countTemplateTasks } from '@/lib/dd-templates';
-import type { DDProject, Target } from '@/lib/types';
+import type { DDProject, Target, DDWorkstream } from '@/lib/types';
+import { DD_WORKSTREAMS } from '@/lib/types';
 import RAGDot from '@/components/RAGDot';
 import ProgressBar from '@/components/ProgressBar';
 import Modal from '@/components/Modal';
@@ -139,10 +140,25 @@ function DDProjectCard({ project }: { project: DDProject }) {
   const risks = getDDRisks(project.id);
   const findings = getDDFindings(project.id);
   const irls = getInfoRequests(project.id);
+  const workstreams = getDDWorkstreams(project.id);
   const openRisks = risks.filter(r => r.status === 'open' || r.status === 'mitigating').length;
   const criticalRisks = risks.filter(r => (r.risk_score || 0) >= 15 && r.status !== 'closed').length;
   const openFindings = findings.filter(f => f.status === 'open').length;
   const pendingIrls = irls.filter(ir => ir.status !== 'complete').length;
+
+  // Compute workstream progress
+  const wsProgress = workstreams.map(ws => {
+    const tasks = getDDTasks(ws.id);
+    const total = tasks.length;
+    const done = tasks.filter(t => t.status === 'complete' || t.status === 'n_a').length;
+    return { ...ws, total, done, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
+  });
+
+  // Days since start
+  const daysSinceStart = Math.floor((Date.now() - new Date(project.start_date).getTime()) / 86400000);
+  const daysToClose = project.target_close_date
+    ? Math.floor((new Date(project.target_close_date).getTime() - Date.now()) / 86400000)
+    : null;
 
   return (
     <Link href={`/diligence/${project.id}`} className="glass-card p-4 block hover:border-opacity-80 transition-all">
@@ -159,9 +175,32 @@ function DDProjectCard({ project }: { project: DDProject }) {
         </span>
       </div>
       <ProgressBar value={project.overall_progress_pct} />
+
+      {/* Workstream mini progress */}
+      {wsProgress.length > 0 && (
+        <div className="mt-3 grid grid-cols-4 md:grid-cols-8 gap-1.5">
+          {wsProgress.map(ws => {
+            const wsInfo = DD_WORKSTREAMS.find(w => w.key === ws.key);
+            const ragColor = ws.rag_status === 'green' ? 'var(--success)' : ws.rag_status === 'amber' ? 'var(--warning)' : ws.rag_status === 'red' ? 'var(--danger)' : 'var(--muted)';
+            return (
+              <div key={ws.id} className="text-center" title={`${wsInfo?.label}: ${ws.done}/${ws.total} tasks (${ws.pct}%)`}>
+                <div className="h-1.5 rounded-full overflow-hidden mb-0.5" style={{ background: 'var(--background)' }}>
+                  <div className="h-full rounded-full" style={{ width: `${ws.pct}%`, background: ragColor, transition: 'width 0.3s' }} />
+                </div>
+                <span className="text-[8px] leading-none" style={{ color: ragColor }}>{wsInfo?.label.substring(0, 4)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div className="flex items-center gap-4 mt-2 text-xs" style={{ color: 'var(--muted)' }}>
-        <span>Started: {new Date(project.start_date).toLocaleDateString()}</span>
-        {project.target_close_date && <span>Target close: {new Date(project.target_close_date).toLocaleDateString()}</span>}
+        <span>{daysSinceStart}d elapsed</span>
+        {daysToClose !== null && (
+          <span style={{ color: daysToClose < 0 ? 'var(--danger)' : daysToClose < 14 ? 'var(--warning)' : 'var(--muted)' }}>
+            {daysToClose < 0 ? `${Math.abs(daysToClose)}d overdue` : `${daysToClose}d to close`}
+          </span>
+        )}
         {openRisks > 0 && (
           <span style={{ color: criticalRisks > 0 ? 'var(--danger)' : 'var(--warning)' }}>
             {openRisks} risk{openRisks !== 1 ? 's' : ''}{criticalRisks > 0 ? ` (${criticalRisks} critical)` : ''}

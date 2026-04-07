@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getTargets, getContacts } from '@/lib/db';
-import type { Target, Contact } from '@/lib/types';
-import { Mail, Copy, Check, ChevronDown, Edit2 } from 'lucide-react';
+import { getTargets, getContacts, getTouchpoints, createTouchpoint, logActivity } from '@/lib/db';
+import type { Target, Contact, Touchpoint } from '@/lib/types';
+import { Mail, Copy, Check, ChevronDown, Edit2, Clock, Trash2, Send } from 'lucide-react';
 
 interface EmailTemplate {
   id: string;
@@ -175,9 +175,14 @@ export default function OutreachPage() {
   const [customBody, setCustomBody] = useState('');
   const [copied, setCopied] = useState<'subject' | 'body' | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [outreachLog, setOutreachLog] = useState<Touchpoint[]>([]);
+  const [showLog, setShowLog] = useState(false);
 
   useEffect(() => {
     setTargets(getTargets());
+    // Load all email touchpoints as outreach log
+    const allTps = getTouchpoints();
+    setOutreachLog(allTps.filter(tp => tp.type === 'email').slice(0, 20));
     // Load saved preferences
     if (typeof window !== 'undefined') {
       setYourName(localStorage.getItem('dealforge_your_name') || '');
@@ -361,13 +366,32 @@ export default function OutreachPage() {
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             <button onClick={handleOpenMailClient} className="btn btn-primary">
               <Mail size={14} /> Open in Mail Client
             </button>
             <button onClick={() => handleCopy('body')} className="btn btn-secondary">
               <Copy size={14} /> Copy Full Email
             </button>
+            {selectedTarget && (
+              <button
+                onClick={() => {
+                  createTouchpoint({
+                    target_id: selectedTarget,
+                    type: 'email',
+                    date: new Date().toISOString(),
+                    subject: filledSubject,
+                    summary: `Sent "${template.name}" template to ${contactName}`,
+                  });
+                  const allTps = getTouchpoints();
+                  setOutreachLog(allTps.filter(tp => tp.type === 'email').slice(0, 20));
+                  alert('Email logged as touchpoint');
+                }}
+                className="btn btn-secondary"
+              >
+                <Send size={14} /> Log as Sent
+              </button>
+            )}
             {isEditing && (
               <button onClick={() => setIsEditing(false)} className="btn btn-ghost">
                 Reset to Template
@@ -375,6 +399,104 @@ export default function OutreachPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Outreach Follow-up Tracker */}
+      <div className="glass-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold flex items-center gap-2">
+            <Clock size={16} style={{ color: 'var(--warning)' }} /> Follow-up Tracker
+          </h2>
+          <button onClick={() => setShowLog(!showLog)} className="btn btn-ghost btn-sm">
+            {showLog ? 'Hide' : 'Show'} Email Log ({outreachLog.length})
+          </button>
+        </div>
+
+        {/* Overdue follow-ups */}
+        {(() => {
+          const allTps = getTouchpoints();
+          const overdue = allTps
+            .filter(tp => tp.follow_up_date && new Date(tp.follow_up_date).getTime() < Date.now())
+            .sort((a, b) => new Date(a.follow_up_date!).getTime() - new Date(b.follow_up_date!).getTime());
+          const upcoming = allTps
+            .filter(tp => tp.follow_up_date && new Date(tp.follow_up_date).getTime() >= Date.now())
+            .sort((a, b) => new Date(a.follow_up_date!).getTime() - new Date(b.follow_up_date!).getTime())
+            .slice(0, 5);
+          const allTargetsList = getTargets();
+
+          if (overdue.length === 0 && upcoming.length === 0) {
+            return <p className="text-sm" style={{ color: 'var(--muted)' }}>No pending follow-ups. Log touchpoints with follow-up dates to track them here.</p>;
+          }
+
+          return (
+            <div className="space-y-3">
+              {overdue.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold mb-2" style={{ color: 'var(--danger)' }}>
+                    Overdue ({overdue.length})
+                  </h3>
+                  <div className="space-y-1">
+                    {overdue.slice(0, 5).map(tp => {
+                      const t = allTargetsList.find(tgt => tgt.id === tp.target_id);
+                      const daysOverdue = Math.floor((Date.now() - new Date(tp.follow_up_date!).getTime()) / 86400000);
+                      return (
+                        <div key={tp.id} className="flex items-center gap-3 p-2 rounded text-xs" style={{ background: 'rgba(239,68,68,0.05)' }}>
+                          <span className="w-2 h-2 rounded-full" style={{ background: 'var(--danger)' }} />
+                          <span className="font-medium">{t?.name || 'Unknown'}</span>
+                          <span className="flex-1 truncate" style={{ color: 'var(--muted-foreground)' }}>{tp.subject}</span>
+                          <span className="font-mono" style={{ color: 'var(--danger)' }}>{daysOverdue}d overdue</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {upcoming.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold mb-2" style={{ color: 'var(--warning)' }}>
+                    Upcoming ({upcoming.length})
+                  </h3>
+                  <div className="space-y-1">
+                    {upcoming.map(tp => {
+                      const t = allTargetsList.find(tgt => tgt.id === tp.target_id);
+                      const daysUntil = Math.floor((new Date(tp.follow_up_date!).getTime() - Date.now()) / 86400000);
+                      return (
+                        <div key={tp.id} className="flex items-center gap-3 p-2 rounded text-xs" style={{ background: 'var(--background)' }}>
+                          <span className="w-2 h-2 rounded-full" style={{ background: daysUntil === 0 ? 'var(--warning)' : 'var(--accent)' }} />
+                          <span className="font-medium">{t?.name || 'Unknown'}</span>
+                          <span className="flex-1 truncate" style={{ color: 'var(--muted-foreground)' }}>{tp.subject}</span>
+                          <span className="font-mono" style={{ color: daysUntil === 0 ? 'var(--warning)' : 'var(--accent)' }}>
+                            {daysUntil === 0 ? 'Today' : `${daysUntil}d`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Email log */}
+        {showLog && outreachLog.length > 0 && (
+          <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+            <h3 className="text-xs font-semibold mb-2" style={{ color: 'var(--muted-foreground)' }}>Recent Emails</h3>
+            <div className="space-y-1">
+              {outreachLog.map(tp => {
+                const t = targets.find(tgt => tgt.id === tp.target_id);
+                return (
+                  <div key={tp.id} className="flex items-center gap-3 p-2 rounded text-xs" style={{ background: 'var(--background)' }}>
+                    <Mail size={12} style={{ color: 'var(--accent)' }} />
+                    <span className="font-medium">{t?.name || 'Unknown'}</span>
+                    <span className="flex-1 truncate" style={{ color: 'var(--muted-foreground)' }}>{tp.subject}</span>
+                    <span style={{ color: 'var(--muted)' }}>{new Date(tp.date).toLocaleDateString()}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
