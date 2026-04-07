@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, List, KanbanSquare, GripVertical, CheckSquare, Square, Trash2, ArrowRight } from 'lucide-react';
+import { Plus, List, KanbanSquare, GripVertical, CheckSquare, Square, Trash2, ArrowRight, ChevronRight, ChevronLeft, X, MoreVertical, XCircle, Star, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { getTargets, createTarget, updateTarget, deleteTarget } from '@/lib/db';
 import { DEAL_STAGES } from '@/lib/types';
@@ -19,6 +19,7 @@ export default function PipelinePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStage, setBulkStage] = useState<string>('');
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetId: string } | null>(null);
 
   const reload = useCallback(() => setTargets(getTargets()), []);
 
@@ -80,6 +81,58 @@ export default function PipelinePage() {
     }
     setSelectedIds(new Set());
     reload();
+  };
+
+  const getNextStage = (current: DealStage): DealStage | null => {
+    const stages = DEAL_STAGES.map(s => s.key);
+    const idx = stages.indexOf(current);
+    return idx < stages.length - 1 ? stages[idx + 1] : null;
+  };
+
+  const getPrevStage = (current: DealStage): DealStage | null => {
+    const stages = DEAL_STAGES.map(s => s.key);
+    const idx = stages.indexOf(current);
+    return idx > 0 ? stages[idx - 1] : null;
+  };
+
+  const advanceStage = (targetId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const target = targets.find(t => t.id === targetId);
+    if (!target) return;
+    const next = getNextStage(target.stage);
+    if (next) { updateTarget(targetId, { stage: next }); reload(); }
+  };
+
+  const regressStage = (targetId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const target = targets.find(t => t.id === targetId);
+    if (!target) return;
+    const prev = getPrevStage(target.stage);
+    if (prev) { updateTarget(targetId, { stage: prev }); reload(); }
+  };
+
+  const markLost = (targetId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    updateTarget(targetId, { stage: 'closed_lost' });
+    reload();
+    setContextMenu(null);
+  };
+
+  const markWon = (targetId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    updateTarget(targetId, { stage: 'closed_won' });
+    reload();
+    setContextMenu(null);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, targetId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, targetId });
   };
 
   const verticals = Array.from(new Set(targets.map(t => t.vertical))).sort();
@@ -217,50 +270,87 @@ export default function PipelinePage() {
 
                 {/* Cards */}
                 <div className="flex-1 overflow-y-auto p-2 space-y-2" style={{ maxHeight: 'calc(100vh - 260px)' }}>
-                  {stageTargets.map(target => (
-                    <Link
+                  {stageTargets.map(target => {
+                    const nextStage = getNextStage(target.stage);
+                    const prevStage = getPrevStage(target.stage);
+                    return (
+                    <div
                       key={target.id}
-                      href={`/targets/${target.id}`}
+                      className="group relative p-3 rounded-lg border cursor-grab active:cursor-grabbing transition-all hover:border-opacity-80"
+                      style={{ background: 'var(--background)', borderColor: 'var(--border)' }}
                       draggable
                       onDragStart={() => handleDragStart(target.id)}
-                      className="block p-3 rounded-lg border cursor-grab active:cursor-grabbing transition-all hover:border-opacity-80"
-                      style={{ background: 'var(--background)', borderColor: 'var(--border)' }}
+                      onContextMenu={e => handleContextMenu(e, target.id)}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="font-medium text-sm truncate">{target.name}</div>
-                        <GripVertical size={14} style={{ color: 'var(--muted)', flexShrink: 0 }} />
-                      </div>
-                      <div className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                        {target.vertical}
-                        {target.geography && ` · ${target.geography}`}
-                      </div>
-                      <div className="flex items-center gap-2 mt-2">
-                        {target.arr && (
-                          <span className="text-xs font-mono" style={{ color: 'var(--success)' }}>
-                            ${(target.arr / 1000000).toFixed(1)}M ARR
+                      <Link href={`/targets/${target.id}`} className="block">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-medium text-sm truncate">{target.name}</div>
+                          <GripVertical size={14} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+                        </div>
+                        <div className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                          {target.vertical}
+                          {target.geography && ` · ${target.geography}`}
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
+                          {target.arr && (
+                            <span className="text-xs font-mono" style={{ color: 'var(--success)' }}>
+                              ${(target.arr / 1000000).toFixed(1)}M ARR
+                            </span>
+                          )}
+                          {target.weighted_score && (
+                            <span className="badge ml-auto" style={{
+                              background: target.weighted_score >= 4 ? 'rgba(16,185,129,0.15)' : target.weighted_score >= 3 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
+                              color: target.weighted_score >= 4 ? 'var(--success)' : target.weighted_score >= 3 ? 'var(--warning)' : 'var(--danger)',
+                            }}>
+                              {target.weighted_score.toFixed(1)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <span className="badge" style={{ background: 'var(--accent-muted)', color: 'var(--accent)', fontSize: '0.65rem' }}>
+                            {target.source}
                           </span>
+                          {daysSinceStageEntry(target.stage_entered_at) > 30 && (
+                            <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--warning)', fontSize: '0.65rem' }}>
+                              {daysSinceStageEntry(target.stage_entered_at)}d
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                      {/* Quick action buttons — visible on hover */}
+                      <div className="absolute bottom-1 right-1 hidden group-hover:flex items-center gap-0.5">
+                        {prevStage && (
+                          <button
+                            onClick={e => regressStage(target.id, e)}
+                            className="p-1 rounded transition-colors"
+                            style={{ background: 'var(--card)', color: 'var(--muted-foreground)' }}
+                            title={`Move to ${DEAL_STAGES.find(s => s.key === prevStage)?.label}`}
+                          >
+                            <ChevronLeft size={12} />
+                          </button>
                         )}
-                        {target.weighted_score && (
-                          <span className="badge ml-auto" style={{
-                            background: target.weighted_score >= 4 ? 'rgba(16,185,129,0.15)' : target.weighted_score >= 3 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
-                            color: target.weighted_score >= 4 ? 'var(--success)' : target.weighted_score >= 3 ? 'var(--warning)' : 'var(--danger)',
-                          }}>
-                            {target.weighted_score.toFixed(1)}
-                          </span>
+                        {nextStage && (
+                          <button
+                            onClick={e => advanceStage(target.id, e)}
+                            className="p-1 rounded transition-colors"
+                            style={{ background: 'var(--accent)', color: 'white' }}
+                            title={`Advance to ${DEAL_STAGES.find(s => s.key === nextStage)?.label}`}
+                          >
+                            <ChevronRight size={12} />
+                          </button>
                         )}
+                        <button
+                          onClick={e => handleContextMenu(e, target.id)}
+                          className="p-1 rounded transition-colors"
+                          style={{ background: 'var(--card)', color: 'var(--muted-foreground)' }}
+                          title="More actions"
+                        >
+                          <MoreVertical size={12} />
+                        </button>
                       </div>
-                      <div className="flex items-center gap-1 mt-1.5">
-                        <span className="badge" style={{ background: 'var(--accent-muted)', color: 'var(--accent)', fontSize: '0.65rem' }}>
-                          {target.source}
-                        </span>
-                        {daysSinceStageEntry(target.stage_entered_at) > 30 && (
-                          <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--warning)', fontSize: '0.65rem' }}>
-                            {daysSinceStageEntry(target.stage_entered_at)}d
-                          </span>
-                        )}
-                      </div>
-                    </Link>
-                  ))}
+                    </div>
+                    );
+                  })}
                   {stageTargets.length === 0 && (
                     <div className="text-center py-8 text-xs" style={{ color: 'var(--muted)' }}>
                       Drop target here
@@ -337,6 +427,93 @@ export default function PipelinePage() {
       <Modal open={showAddModal} onClose={() => setShowAddModal(false)} title="Add Target" width="max-w-2xl">
         <TargetForm onSubmit={handleAdd} onCancel={() => setShowAddModal(false)} submitLabel="Create Target" />
       </Modal>
+
+      {/* Context Menu */}
+      {contextMenu && (() => {
+        const target = targets.find(t => t.id === contextMenu.targetId);
+        if (!target) return null;
+        const next = getNextStage(target.stage);
+        const prev = getPrevStage(target.stage);
+        return (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />
+            <div
+              className="fixed z-50 py-1 rounded-lg shadow-lg min-w-[180px]"
+              style={{
+                left: contextMenu.x,
+                top: contextMenu.y,
+                background: 'var(--card)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              <div className="px-3 py-1.5 text-xs font-medium" style={{ color: 'var(--muted)' }}>
+                {target.name}
+              </div>
+              <div className="border-t my-1" style={{ borderColor: 'var(--border)' }} />
+              <Link
+                href={`/targets/${target.id}`}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-opacity-80 transition-colors"
+                style={{ color: 'var(--foreground)' }}
+                onClick={() => setContextMenu(null)}
+              >
+                <Eye size={14} /> View Details
+              </Link>
+              {next && (
+                <button
+                  onClick={e => { advanceStage(contextMenu.targetId, e); setContextMenu(null); }}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm w-full text-left hover:bg-opacity-80 transition-colors"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  <ChevronRight size={14} /> Advance to {DEAL_STAGES.find(s => s.key === next)?.label}
+                </button>
+              )}
+              {prev && (
+                <button
+                  onClick={e => { regressStage(contextMenu.targetId, e); setContextMenu(null); }}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm w-full text-left hover:bg-opacity-80 transition-colors"
+                  style={{ color: 'var(--muted-foreground)' }}
+                >
+                  <ChevronLeft size={14} /> Back to {DEAL_STAGES.find(s => s.key === prev)?.label}
+                </button>
+              )}
+              <div className="border-t my-1" style={{ borderColor: 'var(--border)' }} />
+              {target.stage !== 'closed_won' && (
+                <button
+                  onClick={e => markWon(contextMenu.targetId, e)}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm w-full text-left"
+                  style={{ color: 'var(--success)' }}
+                >
+                  <Star size={14} /> Mark Won
+                </button>
+              )}
+              {target.stage !== 'closed_lost' && (
+                <button
+                  onClick={e => markLost(contextMenu.targetId, e)}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm w-full text-left"
+                  style={{ color: 'var(--danger)' }}
+                >
+                  <XCircle size={14} /> Mark Lost
+                </button>
+              )}
+              <div className="border-t my-1" style={{ borderColor: 'var(--border)' }} />
+              <button
+                onClick={e => {
+                  e.preventDefault();
+                  if (confirm(`Delete ${target.name}?`)) {
+                    deleteTarget(contextMenu.targetId);
+                    reload();
+                  }
+                  setContextMenu(null);
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm w-full text-left"
+                style={{ color: 'var(--danger)' }}
+              >
+                <Trash2 size={14} /> Delete Target
+              </button>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

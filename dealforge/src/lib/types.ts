@@ -312,6 +312,15 @@ export interface ApprovalGate {
   created_at: string;
 }
 
+export interface DDWorkstreamComment {
+  id: string;
+  workstream_id: string;
+  project_id: string;
+  author: string;
+  content: string;
+  created_at: string;
+}
+
 // --- Dashboard ---
 
 export interface PipelineStats {

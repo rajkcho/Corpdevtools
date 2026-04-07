@@ -6,7 +6,7 @@ import {
   ArrowLeft, Plus, Trash2, ChevronDown, ChevronRight, AlertTriangle,
   FileText, CheckCircle2, Circle, Clock, Ban, Upload, Send, Eye,
   TrendingUp, DollarSign, Code, Scale, UserCheck, Settings,
-  Users, BookOpen, Download, Edit2,
+  Users, BookOpen, Download, Edit2, MessageSquare,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -18,12 +18,13 @@ import {
   getDDDocuments, createDDDocument, deleteDDDocument,
   getApprovalGates, createApprovalGate, updateApprovalGate,
   recalcDDProgress,
+  getDDWorkstreamComments, createDDWorkstreamComment, deleteDDWorkstreamComment,
 } from '@/lib/db';
 import { DD_WORKSTREAMS } from '@/lib/types';
 import type {
   DDProject, DDWorkstream, DDTask, DDRisk, DDFinding,
   InformationRequest, DDDocument, ApprovalGate,
-  DDWorkstreamKey, DDStatus, DDPhase,
+  DDWorkstreamKey, DDStatus, DDPhase, DDWorkstreamComment,
 } from '@/lib/types';
 import Modal from '@/components/Modal';
 import RAGDot from '@/components/RAGDot';
@@ -308,6 +309,7 @@ export default function DDProjectDetailPage() {
             <WorkstreamSection
               key={ws.id}
               workstream={ws}
+              projectId={id}
               expanded={expandedWs === ws.id}
               onToggle={() => setExpandedWs(expandedWs === ws.id ? null : ws.id)}
               onReload={() => { handleRecalc(); }}
@@ -340,17 +342,23 @@ export default function DDProjectDetailPage() {
 }
 
 // === WORKSTREAM SECTION (Hierarchical) ===
-function WorkstreamSection({ workstream, expanded, onToggle, onReload }: {
-  workstream: DDWorkstream; expanded: boolean; onToggle: () => void; onReload: () => void;
+function WorkstreamSection({ workstream, projectId, expanded, onToggle, onReload }: {
+  workstream: DDWorkstream; projectId: string; expanded: boolean; onToggle: () => void; onReload: () => void;
 }) {
   const [tasks, setTasks] = useState<DDTask[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<DDTask['priority']>('medium');
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
+  const [comments, setComments] = useState<DDWorkstreamComment[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [showComments, setShowComments] = useState(false);
 
   useEffect(() => {
-    if (expanded) setTasks(getDDTasks(workstream.id));
+    if (expanded) {
+      setTasks(getDDTasks(workstream.id));
+      setComments(getDDWorkstreamComments(workstream.id));
+    }
   }, [expanded, workstream.id]);
 
   const refreshTasks = () => { setTasks(getDDTasks(workstream.id)); onReload(); };
@@ -435,27 +443,98 @@ function WorkstreamSection({ workstream, expanded, onToggle, onReload }: {
       {expanded && (
         <div className="border-t px-4 pb-4 pt-3" style={{ borderColor: 'var(--border)' }}>
           {/* Workstream owner & notes */}
-          <div className="flex items-center gap-3 mb-3 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
-            <div className="flex items-center gap-2 flex-1">
-              <label className="text-xs" style={{ color: 'var(--muted)' }}>Owner:</label>
-              <input
-                value={workstream.owner || ''}
-                onChange={e => { updateDDWorkstream(workstream.id, { owner: e.target.value }); onReload(); }}
-                placeholder="Assign owner..."
-                className="flex-1 text-xs"
-                style={{ padding: '0.25rem 0.5rem' }}
-              />
+          <div className="space-y-2 mb-3 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 flex-1">
+                <label className="text-xs" style={{ color: 'var(--muted)' }}>Owner:</label>
+                <input
+                  value={workstream.owner || ''}
+                  onChange={e => { updateDDWorkstream(workstream.id, { owner: e.target.value }); onReload(); }}
+                  placeholder="Assign owner..."
+                  className="flex-1 text-xs"
+                  style={{ padding: '0.25rem 0.5rem' }}
+                />
+              </div>
+              <button
+                onClick={() => setShowComments(!showComments)}
+                className="btn btn-ghost btn-sm flex items-center gap-1"
+                style={{ fontSize: '0.65rem', color: comments.length > 0 ? 'var(--accent)' : 'var(--muted)' }}
+              >
+                <MessageSquare size={12} />
+                {comments.length > 0 ? `${comments.length} comment${comments.length > 1 ? 's' : ''}` : 'Comments'}
+              </button>
             </div>
-            <div className="flex items-center gap-2 flex-1">
-              <label className="text-xs" style={{ color: 'var(--muted)' }}>Notes:</label>
-              <input
+            <div>
+              <label className="text-xs block mb-1" style={{ color: 'var(--muted)' }}>Notes:</label>
+              <textarea
                 value={workstream.notes || ''}
                 onChange={e => { updateDDWorkstream(workstream.id, { notes: e.target.value }); onReload(); }}
-                placeholder="Workstream notes..."
-                className="flex-1 text-xs"
-                style={{ padding: '0.25rem 0.5rem' }}
+                placeholder="Workstream notes, key findings, blockers..."
+                className="w-full text-xs"
+                rows={2}
+                style={{ padding: '0.5rem', resize: 'vertical' }}
               />
             </div>
+            {/* Comment Thread */}
+            {showComments && (
+              <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--background)' }}>
+                <div className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Discussion</div>
+                {comments.length === 0 && (
+                  <div className="text-xs" style={{ color: 'var(--muted)' }}>No comments yet.</div>
+                )}
+                {comments.map(c => (
+                  <div key={c.id} className="flex gap-2 group">
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0" style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>
+                      {c.author.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium">{c.author}</span>
+                        <span className="text-[10px]" style={{ color: 'var(--muted)' }}>
+                          {new Date(c.created_at).toLocaleDateString()} {new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <button
+                          onClick={() => { deleteDDWorkstreamComment(c.id); setComments(getDDWorkstreamComments(workstream.id)); }}
+                          className="hidden group-hover:inline-block ml-auto"
+                          style={{ color: 'var(--muted)' }}
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      </div>
+                      <div className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>{c.content}</div>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex gap-2 mt-2">
+                  <input
+                    value={newComment}
+                    onChange={e => setNewComment(e.target.value)}
+                    placeholder="Add a comment..."
+                    className="flex-1 text-xs"
+                    style={{ padding: '0.25rem 0.5rem' }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && newComment.trim()) {
+                        createDDWorkstreamComment({ workstream_id: workstream.id, project_id: projectId, content: newComment.trim() });
+                        setNewComment('');
+                        setComments(getDDWorkstreamComments(workstream.id));
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (!newComment.trim()) return;
+                      createDDWorkstreamComment({ workstream_id: workstream.id, project_id: projectId, content: newComment.trim() });
+                      setNewComment('');
+                      setComments(getDDWorkstreamComments(workstream.id));
+                    }}
+                    className="btn btn-primary btn-sm"
+                    style={{ padding: '0.25rem 0.5rem' }}
+                  >
+                    <Send size={12} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Batch actions */}

@@ -10,6 +10,7 @@ import type {
   InformationRequest, DDDocument, ApprovalGate,
   DealStage, DealScore, DDStatus, RAGStatus,
   ActivityEntry, ActivityType, DealTerm, JournalEntry,
+  DDWorkstreamComment,
 } from './types';
 import { SCORE_CRITERIA, DD_WORKSTREAMS } from './types';
 import { DD_TASK_TEMPLATES } from './dd-templates';
@@ -786,6 +787,42 @@ export function updateJournalEntry(id: string, data: Partial<JournalEntry>): voi
 
 export function deleteJournalEntry(id: string): void {
   setStore('journal_entries', getStore<JournalEntry>('journal_entries').filter(j => j.id !== id));
+}
+
+// --- DD Workstream Comments ---
+
+export function getDDWorkstreamComments(workstreamId: string): DDWorkstreamComment[] {
+  const all = getStore<DDWorkstreamComment>('dd_ws_comments');
+  return all
+    .filter(c => c.workstream_id === workstreamId)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+export function getDDProjectComments(projectId: string): DDWorkstreamComment[] {
+  const all = getStore<DDWorkstreamComment>('dd_ws_comments');
+  return all
+    .filter(c => c.project_id === projectId)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+export function createDDWorkstreamComment(data: Partial<DDWorkstreamComment>): DDWorkstreamComment {
+  const comments = getStore<DDWorkstreamComment>('dd_ws_comments');
+  const comment: DDWorkstreamComment = {
+    id: uuidv4(),
+    workstream_id: data.workstream_id || '',
+    project_id: data.project_id || '',
+    author: data.author || 'Me',
+    content: data.content || '',
+    created_at: now(),
+    ...data,
+  };
+  comments.push(comment);
+  setStore('dd_ws_comments', comments);
+  return comment;
+}
+
+export function deleteDDWorkstreamComment(id: string): void {
+  setStore('dd_ws_comments', getStore<DDWorkstreamComment>('dd_ws_comments').filter(c => c.id !== id));
 }
 
 // --- Export Utilities ---
