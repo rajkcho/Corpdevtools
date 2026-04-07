@@ -27,6 +27,7 @@ import TargetForm from '@/components/TargetForm';
 import RadarChart from '@/components/RadarChart';
 import ScoringWizard from '@/components/ScoringWizard';
 import RelationshipTimeline from '@/components/RelationshipTimeline';
+import DealSuggestions from '@/components/DealSuggestions';
 
 const TOUCHPOINT_ICONS: Record<string, React.ReactNode> = {
   email: <Mail size={14} />,
@@ -461,6 +462,20 @@ export default function TargetDetailPage() {
           </div>
         );
       })()}
+
+      {/* Smart Suggestions */}
+      {!['closed_lost'].includes(target.stage) && (
+        <DealSuggestions
+          target={target}
+          contacts={contacts}
+          touchpoints={touchpoints}
+          dealTerms={dealTerms}
+          ddProject={typeof window !== 'undefined' ? (() => { try { const p = getDDProjectByTarget(id); return p || undefined; } catch { return undefined; } })() : undefined}
+          hasThesis={typeof window !== 'undefined' && !!localStorage.getItem(`dealforge_thesis_${id}`)}
+          hasCompetitors={typeof window !== 'undefined' && !!localStorage.getItem(`dealforge_competitors_${id}`)}
+          hasSWOT={typeof window !== 'undefined' && !!localStorage.getItem(`dealforge_swot_${id}`)}
+        />
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 p-1 rounded-lg w-fit" style={{ background: 'var(--card)' }}>
