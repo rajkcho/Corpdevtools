@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Target, FileSearch, BarChart3, ArrowUpDown, Settings, LayoutDashboard, Clock } from 'lucide-react';
+import { Search, Target, FileSearch, BarChart3, ArrowUpDown, Settings, LayoutDashboard, Clock, Mail, Keyboard } from 'lucide-react';
 import { getTargets, getDDProjects } from '@/lib/db';
 import type { Target as TargetType, DDProject } from '@/lib/types';
 
@@ -22,32 +22,85 @@ const PAGES: SearchResult[] = [
   { id: 'compare', type: 'page', label: 'Compare Targets', href: '/compare', icon: <ArrowUpDown size={16} /> },
   { id: 'analytics', type: 'page', label: 'Analytics', href: '/analytics', icon: <BarChart3 size={16} /> },
   { id: 'diligence', type: 'page', label: 'Due Diligence', href: '/diligence', icon: <FileSearch size={16} /> },
+  { id: 'outreach', type: 'page', label: 'Outreach Templates', href: '/outreach', icon: <Mail size={16} /> },
   { id: 'activity', type: 'page', label: 'Activity Feed', href: '/activity', icon: <Clock size={16} /> },
   { id: 'settings', type: 'page', label: 'Settings', href: '/settings', icon: <Settings size={16} /> },
 ];
 
+const SHORTCUTS = [
+  { keys: ['⌘', 'K'], description: 'Open command palette' },
+  { keys: ['?'], description: 'Show keyboard shortcuts' },
+  { keys: ['G', 'D'], description: 'Go to Dashboard' },
+  { keys: ['G', 'P'], description: 'Go to Pipeline' },
+  { keys: ['G', 'T'], description: 'Go to Targets' },
+  { keys: ['G', 'A'], description: 'Go to Analytics' },
+  { keys: ['G', 'I'], description: 'Go to Due Diligence' },
+  { keys: ['G', 'O'], description: 'Go to Outreach' },
+  { keys: ['G', 'S'], description: 'Go to Settings' },
+];
+
 export default function CommandPalette() {
   const [open, setOpen] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [pendingG, setPendingG] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  // Listen for Cmd+K / Ctrl+K
+  // Listen for Cmd+K / Ctrl+K, ?, and G+key navigation
   useEffect(() => {
+    let gTimer: ReturnType<typeof setTimeout>;
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in inputs
+      const tag = (e.target as HTMLElement).tagName;
+      const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setOpen(prev => !prev);
+        setShowShortcuts(false);
+        return;
       }
       if (e.key === 'Escape') {
         setOpen(false);
+        setShowShortcuts(false);
+        return;
+      }
+
+      if (isInput) return;
+
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        setShowShortcuts(prev => !prev);
+        setOpen(false);
+        return;
+      }
+
+      // G+key navigation
+      if (e.key === 'g' && !e.metaKey && !e.ctrlKey) {
+        setPendingG(true);
+        gTimer = setTimeout(() => setPendingG(false), 1000);
+        return;
+      }
+
+      if (pendingG) {
+        setPendingG(false);
+        clearTimeout(gTimer);
+        const routes: Record<string, string> = {
+          d: '/', p: '/pipeline', t: '/targets', a: '/analytics',
+          i: '/diligence', o: '/outreach', s: '/settings',
+        };
+        if (routes[e.key]) {
+          e.preventDefault();
+          router.push(routes[e.key]);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    return () => { window.removeEventListener('keydown', handleKeyDown); clearTimeout(gTimer); };
+  }, [pendingG, router]);
 
   // Focus input when opened
   useEffect(() => {
@@ -124,7 +177,36 @@ export default function CommandPalette() {
     }
   };
 
-  if (!open) return null;
+  if (!open && !showShortcuts) return null;
+
+  // Shortcuts panel
+  if (showShortcuts) return (
+    <div className="modal-overlay" onClick={() => setShowShortcuts(false)} style={{ alignItems: 'flex-start', paddingTop: '20vh' }}>
+      <div className="modal-content max-w-md" onClick={e => e.stopPropagation()} style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Keyboard size={16} /> Keyboard Shortcuts
+          </div>
+          <kbd className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'var(--background)', color: 'var(--muted)', border: '1px solid var(--border)' }}>ESC</kbd>
+        </div>
+        <div className="p-4 space-y-2">
+          {SHORTCUTS.map((s, i) => (
+            <div key={i} className="flex items-center justify-between py-1.5">
+              <span className="text-sm">{s.description}</span>
+              <div className="flex items-center gap-1">
+                {s.keys.map((k, j) => (
+                  <span key={j}>
+                    <kbd className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'var(--background)', border: '1px solid var(--border)', color: 'var(--muted-foreground)' }}>{k}</kbd>
+                    {j < s.keys.length - 1 && <span className="text-xs mx-0.5" style={{ color: 'var(--muted)' }}>+</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="modal-overlay" onClick={() => setOpen(false)} style={{ alignItems: 'flex-start', paddingTop: '20vh' }}>
