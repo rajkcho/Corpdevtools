@@ -25,6 +25,7 @@ import type { Target, Touchpoint, MeetingNote, Contact, DealScore, DealTerm, Act
 import Modal from '@/components/Modal';
 import TargetForm from '@/components/TargetForm';
 import RadarChart from '@/components/RadarChart';
+import ScoringWizard from '@/components/ScoringWizard';
 
 const TOUCHPOINT_ICONS: Record<string, React.ReactNode> = {
   email: <Mail size={14} />,
@@ -49,6 +50,7 @@ export default function TargetDetailPage() {
   const [showTouchpointModal, setShowTouchpointModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showScoringWizard, setShowScoringWizard] = useState(false);
   const [activeTab, setActiveTab] = useState<'timeline' | 'notes' | 'contacts' | 'journal' | 'dealroom' | 'scoring' | 'integration'>('timeline');
   const [ddProjectId, setDDProjectId] = useState<string | null>(null);
   const [dealTerms, setDealTerms] = useState<DealTerm[]>([]);
@@ -719,6 +721,13 @@ export default function TargetDetailPage() {
           <div className="glass-card p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold">VMS Acquisition Scorecard</h2>
+              <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowScoringWizard(true)}
+                className="btn btn-primary btn-sm"
+              >
+                Scoring Wizard
+              </button>
               <button
                 onClick={async () => {
                   try {
@@ -746,6 +755,7 @@ export default function TargetDetailPage() {
               >
                 AI Risk Assessment
               </button>
+              </div>
             </div>
 
             {/* Radar Chart */}
@@ -884,6 +894,15 @@ export default function TargetDetailPage() {
       )}
 
       {/* Edit Modal */}
+      {showScoringWizard && target && (
+        <ScoringWizard
+          currentScore={target.score}
+          targetName={target.name}
+          onSave={(score) => { updateTarget(id, { score }); reload(); setShowScoringWizard(false); }}
+          onClose={() => setShowScoringWizard(false)}
+        />
+      )}
+
       <Modal open={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Target" width="max-w-2xl">
         <TargetForm
           initial={target}
