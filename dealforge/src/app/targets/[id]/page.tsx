@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import {
-  getTarget, updateTarget, deleteTarget,
+  getTarget, getTargets, updateTarget, deleteTarget,
   getTouchpoints, createTouchpoint, deleteTouchpoint,
   getMeetingNotes, createMeetingNote, deleteMeetingNote,
   getContacts, createContact, updateContact, deleteContact,
@@ -746,6 +746,7 @@ export default function TargetDetailPage() {
         <ContactForm
           onSubmit={(data) => { createContact({ ...data, target_id: id }); reload(); setShowContactModal(false); }}
           onCancel={() => setShowContactModal(false)}
+          existingContacts={getContacts()}
         />
       </Modal>
 
@@ -834,8 +835,16 @@ function TouchpointForm({ onSubmit, onCancel }: { onSubmit: (data: Partial<Touch
   );
 }
 
-function ContactForm({ onSubmit, onCancel }: { onSubmit: (data: Partial<Contact>) => void; onCancel: () => void }) {
+function ContactForm({ onSubmit, onCancel, existingContacts = [] }: { onSubmit: (data: Partial<Contact>) => void; onCancel: () => void; existingContacts?: Contact[] }) {
   const [form, setForm] = useState({ name: '', title: '', email: '', phone: '', linkedin: '', is_primary: false, notes: '' });
+
+  // Duplicate detection
+  const duplicates = existingContacts.filter(c => {
+    if (form.name.length < 2 && !form.email) return false;
+    const nameSimilar = form.name.length >= 2 && c.name.toLowerCase().includes(form.name.toLowerCase());
+    const emailMatch = form.email && c.email && c.email.toLowerCase() === form.email.toLowerCase();
+    return nameSimilar || emailMatch;
+  });
 
   return (
     <form onSubmit={e => { e.preventDefault(); onSubmit(form); }} className="space-y-3">
@@ -843,6 +852,18 @@ function ContactForm({ onSubmit, onCancel }: { onSubmit: (data: Partial<Contact>
         <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Name *</label>
         <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="w-full" />
       </div>
+      {duplicates.length > 0 && (
+        <div className="p-2 rounded-lg text-xs" style={{ background: 'rgba(245,158,11,0.1)', color: 'var(--warning)' }}>
+          <div className="font-medium mb-1">Possible duplicates found:</div>
+          {duplicates.map(d => (
+            <div key={d.id} className="flex items-center gap-2">
+              <span>{d.name}</span>
+              {d.title && <span style={{ color: 'var(--muted)' }}>({d.title})</span>}
+              {d.email && <span style={{ color: 'var(--muted)' }}>{d.email}</span>}
+            </div>
+          ))}
+        </div>
+      )}
       <div>
         <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Title</label>
         <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className="w-full" placeholder="e.g. VP of Sales" />
@@ -1174,7 +1195,7 @@ function JournalPanel({ targetId, entries, onReload }: { targetId: string; entri
 }
 
 // === DEAL ROOM PANEL ===
-function DealRoomPanel({ targetId, terms, activities, onReload }: { targetId: string; terms: DealTerm[]; activities: ActivityEntry[]; onReload: () => void }) {
+function DealRoomPanel({ targetId, terms, activities, onReload }: { targetId: string; terms: DealTerm[]; activities: ActivityEntry[]; onReload: () => void; }) {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ category: 'valuation' as DealTerm['category'], label: '', value: '', notes: '' });
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1275,6 +1296,9 @@ function DealRoomPanel({ targetId, terms, activities, onReload }: { targetId: st
         <QualificationChecklist targetId={targetId} />
       </div>
 
+      {/* Related Targets */}
+      <RelatedTargets targetId={targetId} onReload={onReload} />
+
       {/* Recent activity */}
       {activities.length > 0 && (
         <div className="glass-card p-4">
@@ -1321,6 +1345,137 @@ function DealRoomPanel({ targetId, terms, activities, onReload }: { targetId: st
             <div className="flex justify-end gap-2 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
               <button onClick={() => setShowAdd(false)} className="btn btn-secondary">Cancel</button>
               <button onClick={handleAdd} disabled={!form.label || !form.value} className="btn btn-primary">Add Term</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RelatedTargets({ targetId, onReload }: { targetId: string; onReload: () => void }) {
+  const [allTargets, setAllTargets] = useState<Target[]>([]);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkType, setLinkType] = useState<'parent' | 'related'>('related');
+
+  useEffect(() => { setAllTargets(getTargets()); }, []);
+
+  const current = allTargets.find(t => t.id === targetId);
+  if (!current) return null;
+
+  const parentTarget = current.parent_target_id ? allTargets.find(t => t.id === current.parent_target_id) : null;
+  const childTargets = allTargets.filter(t => t.parent_target_id === targetId);
+  const relatedTargets = (current.related_target_ids || []).map(rid => allTargets.find(t => t.id === rid)).filter(Boolean) as Target[];
+  const hasRelationships = parentTarget || childTargets.length > 0 || relatedTargets.length > 0;
+
+  const availableTargets = allTargets.filter(t => t.id !== targetId && t.id !== current.parent_target_id && !(current.related_target_ids || []).includes(t.id));
+
+  const linkTarget = (otherId: string) => {
+    if (linkType === 'parent') {
+      updateTarget(targetId, { parent_target_id: otherId });
+    } else {
+      const existing = current.related_target_ids || [];
+      updateTarget(targetId, { related_target_ids: [...existing, otherId] });
+      // Bidirectional link
+      const other = allTargets.find(t => t.id === otherId);
+      if (other) {
+        const otherRelated = other.related_target_ids || [];
+        if (!otherRelated.includes(targetId)) {
+          updateTarget(otherId, { related_target_ids: [...otherRelated, targetId] });
+        }
+      }
+    }
+    setShowLinkModal(false);
+    onReload();
+    setAllTargets(getTargets());
+  };
+
+  const unlinkParent = () => {
+    updateTarget(targetId, { parent_target_id: undefined });
+    onReload();
+    setAllTargets(getTargets());
+  };
+
+  const unlinkRelated = (otherId: string) => {
+    updateTarget(targetId, { related_target_ids: (current.related_target_ids || []).filter(r => r !== otherId) });
+    const other = allTargets.find(t => t.id === otherId);
+    if (other) {
+      updateTarget(otherId, { related_target_ids: (other.related_target_ids || []).filter(r => r !== targetId) });
+    }
+    onReload();
+    setAllTargets(getTargets());
+  };
+
+  const TargetLink = ({ t, label, onUnlink }: { t: Target; label: string; onUnlink?: () => void }) => (
+    <div className="flex items-center gap-2 p-2 rounded" style={{ background: 'var(--background)' }}>
+      <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>{label}</span>
+      <Link href={`/targets/${t.id}`} className="text-sm font-medium hover:underline" style={{ color: 'var(--accent)' }}>{t.name}</Link>
+      <span className="text-xs" style={{ color: 'var(--muted)' }}>{t.vertical}</span>
+      <span className="badge ml-auto" style={{
+        background: `${DEAL_STAGES.find(s => s.key === t.stage)?.color}20`,
+        color: DEAL_STAGES.find(s => s.key === t.stage)?.color,
+      }}>
+        {DEAL_STAGES.find(s => s.key === t.stage)?.label}
+      </span>
+      {onUnlink && (
+        <button onClick={onUnlink} className="p-1 rounded" style={{ color: 'var(--muted)' }}>
+          <Trash2 size={12} />
+        </button>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="glass-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
+          Related Targets
+        </h3>
+        <button onClick={() => setShowLinkModal(true)} className="btn btn-ghost btn-sm" style={{ fontSize: '0.65rem' }}>
+          <Plus size={12} /> Link Target
+        </button>
+      </div>
+
+      {!hasRelationships && (
+        <p className="text-xs" style={{ color: 'var(--muted)' }}>No related targets. Link parent companies, subsidiaries, or related opportunities.</p>
+      )}
+
+      <div className="space-y-1.5">
+        {parentTarget && <TargetLink t={parentTarget} label="Parent" onUnlink={unlinkParent} />}
+        {childTargets.map(c => <TargetLink key={c.id} t={c} label="Subsidiary" />)}
+        {relatedTargets.map(r => <TargetLink key={r.id} t={r} label="Related" onUnlink={() => unlinkRelated(r.id)} />)}
+      </div>
+
+      {showLinkModal && (
+        <div className="modal-overlay" onClick={() => setShowLinkModal(false)}>
+          <div className="modal-content max-w-md p-5 space-y-3" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold">Link Target</h3>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Relationship Type</label>
+              <select value={linkType} onChange={e => setLinkType(e.target.value as 'parent' | 'related')} className="w-full text-sm">
+                <option value="related">Related / Tuck-in</option>
+                <option value="parent">Parent Company</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Select Target</label>
+              <div className="max-h-48 overflow-y-auto space-y-1 p-1 rounded" style={{ background: 'var(--background)' }}>
+                {availableTargets.length === 0 && <p className="text-xs p-2" style={{ color: 'var(--muted)' }}>No other targets available.</p>}
+                {availableTargets.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => linkTarget(t.id)}
+                    className="w-full text-left p-2 rounded text-sm hover:bg-opacity-80 transition-colors flex items-center gap-2"
+                    style={{ color: 'var(--foreground)' }}
+                  >
+                    <span className="font-medium">{t.name}</span>
+                    <span className="text-xs" style={{ color: 'var(--muted)' }}>{t.vertical}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end pt-2">
+              <button onClick={() => setShowLinkModal(false)} className="btn btn-secondary">Cancel</button>
             </div>
           </div>
         </div>

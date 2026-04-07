@@ -114,6 +114,8 @@ export interface Target {
   updated_at: string;
   first_contact_date?: string;
   stage_entered_at: string;
+  parent_target_id?: string;
+  related_target_ids?: string[];
 }
 
 export interface Contact {
