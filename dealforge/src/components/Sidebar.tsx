@@ -22,6 +22,7 @@ import {
   Calculator,
   Building2,
   FileText,
+  Map,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { getNotificationCounts, getAlerts, type NotificationCounts, type Alert } from '@/lib/notifications';
@@ -36,6 +37,7 @@ const NAV_ITEMS = [
   { href: '/outreach', label: 'Outreach', icon: Mail },
   { href: '/portfolio', label: 'Portfolio', icon: Building2 },
   { href: '/reports', label: 'Reports', icon: FileText },
+  { href: '/market-map', label: 'Market Map', icon: Map },
   { href: '/valuation', label: 'Valuation', icon: Calculator },
   { href: '/diligence', label: 'Due Diligence', icon: FileSearch },
   { href: '/activity', label: 'Activity', icon: Clock },
