@@ -1,0 +1,16 @@
+{
+  "name": "DealForge - M&A Intelligence Platform",
+  "short_name": "DealForge",
+  "description": "Deal pipeline management and due diligence tracking for vertical market software acquisitions",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0e17",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

@@ -29,6 +29,7 @@ import Modal from '@/components/Modal';
 import RAGDot from '@/components/RAGDot';
 import ProgressBar from '@/components/ProgressBar';
 import { generateDDReport } from '@/lib/dd-report';
+import { generateDDChecklist } from '@/lib/dd-checklist-export';
 
 const WS_ICONS: Record<string, React.ReactNode> = {
   commercial: <TrendingUp size={16} />,
@@ -134,6 +135,21 @@ export default function DDProjectDetailPage() {
             className="btn btn-secondary btn-sm"
           >
             <Download size={14} /> Export Report
+          </button>
+          <button
+            onClick={() => {
+              const html = generateDDChecklist(id);
+              const blob = new Blob([html], { type: 'text/html' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `dd-checklist-${project.target_name.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.html`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="btn btn-secondary btn-sm"
+          >
+            <CheckCircle2 size={14} /> Export Checklist
           </button>
         </div>
       </div>

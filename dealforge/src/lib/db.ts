@@ -59,6 +59,7 @@ export function createTarget(data: Partial<Target>): Target {
   target.weighted_score = calculateWeightedScore(target.score);
   targets.push(target);
   setStore('targets', targets);
+  logActivity('target_created', `Added target: ${target.name}`, { target_id: target.id, target_name: target.name });
   return target;
 }
 
@@ -79,18 +80,28 @@ export function updateTarget(id: string, data: Partial<Target>): Target | undefi
 
   if (data.score) {
     targets[idx].weighted_score = calculateWeightedScore(data.score);
+    logActivity('score_updated', `Updated score for ${prev.name}`, { target_id: id, target_name: prev.name });
   }
 
   setStore('targets', targets);
+
+  if (stageChanged) {
+    logActivity('stage_changed', `${prev.name}: ${prev.stage} → ${data.stage}`, { target_id: id, target_name: prev.name, metadata: { from: prev.stage, to: data.stage! } });
+  } else if (!data.score) {
+    logActivity('target_updated', `Updated target: ${prev.name}`, { target_id: id, target_name: prev.name });
+  }
+
   return targets[idx];
 }
 
 export function deleteTarget(id: string): void {
+  const target = getTarget(id);
   setStore('targets', getTargets().filter(t => t.id !== id));
   // Cascade delete related records
   setStore('touchpoints', getTouchpoints().filter(t => t.target_id !== id));
   setStore('meeting_notes', getMeetingNotes().filter(m => m.target_id !== id));
   setStore('contacts', getContacts().filter(c => c.target_id !== id));
+  if (target) logActivity('target_deleted', `Deleted target: ${target.name}`, { target_id: id, target_name: target.name });
 }
 
 export function getTargetsByStage(stage: DealStage): Target[] {
@@ -129,6 +140,8 @@ export function createContact(data: Partial<Contact>): Contact {
   };
   contacts.push(contact);
   setStore('contacts', contacts);
+  const target = getTarget(contact.target_id);
+  logActivity('contact_added', `Added contact: ${contact.name}`, { target_id: contact.target_id, target_name: target?.name });
   return contact;
 }
 
@@ -167,6 +180,8 @@ export function createTouchpoint(data: Partial<Touchpoint>): Touchpoint {
   };
   touchpoints.push(tp);
   setStore('touchpoints', touchpoints);
+  const target = getTarget(tp.target_id);
+  logActivity('touchpoint_added', `${tp.type}: ${tp.subject}`, { target_id: tp.target_id, target_name: target?.name });
   return tp;
 }
 
@@ -203,6 +218,8 @@ export function createMeetingNote(data: Partial<MeetingNote>): MeetingNote {
   };
   notes.push(note);
   setStore('meeting_notes', notes);
+  const target = getTarget(note.target_id);
+  logActivity('meeting_note_added', `Uploaded: ${note.file_name}`, { target_id: note.target_id, target_name: target?.name });
   return note;
 }
 
@@ -260,6 +277,7 @@ export function createDDProject(data: Partial<DDProject>): DDProject {
     });
   }
 
+  logActivity('dd_project_created', `Started DD for ${project.target_name}`, { target_id: project.target_id, target_name: project.target_name, project_id: project.id });
   return project;
 }
 
@@ -267,8 +285,12 @@ export function updateDDProject(id: string, data: Partial<DDProject>): DDProject
   const projects = getDDProjects();
   const idx = projects.findIndex(p => p.id === id);
   if (idx === -1) return undefined;
-  projects[idx] = { ...projects[idx], ...data, updated_at: now() };
+  const prev = projects[idx];
+  projects[idx] = { ...prev, ...data, updated_at: now() };
   setStore('dd_projects', projects);
+  if (data.phase && data.phase !== prev.phase) {
+    logActivity('phase_changed', `${prev.target_name}: phase ${prev.phase} → ${data.phase}`, { target_id: prev.target_id, target_name: prev.target_name, project_id: id });
+  }
   return projects[idx];
 }
 
@@ -359,13 +381,17 @@ export function updateDDTask(id: string, data: Partial<DDTask>): void {
   const tasks = getStore<DDTask>('dd_tasks');
   const idx = tasks.findIndex(t => t.id === id);
   if (idx !== -1) {
+    const prev = tasks[idx];
     tasks[idx] = {
-      ...tasks[idx],
+      ...prev,
       ...data,
       updated_at: now(),
-      completed_at: data.status === 'complete' ? now() : tasks[idx].completed_at,
+      completed_at: data.status === 'complete' ? now() : prev.completed_at,
     };
     setStore('dd_tasks', tasks);
+    if (data.status === 'complete' && prev.status !== 'complete') {
+      logActivity('dd_task_completed', `Completed DD task: ${prev.title}`, {});
+    }
   }
 }
 
@@ -398,6 +424,7 @@ export function createDDRisk(data: Partial<DDRisk>): DDRisk {
   risk.risk_score = risk.impact * risk.probability;
   risks.push(risk);
   setStore('dd_risks', risks);
+  logActivity('dd_risk_added', `New risk: ${risk.title} (score: ${risk.risk_score})`, { project_id: risk.project_id });
   return risk;
 }
 
@@ -440,6 +467,7 @@ export function createDDFinding(data: Partial<DDFinding>): DDFinding {
   };
   findings.push(finding);
   setStore('dd_findings', findings);
+  logActivity('dd_finding_added', `New finding: ${finding.title} (${finding.severity})`, { project_id: finding.project_id });
   return finding;
 }
 
@@ -480,6 +508,7 @@ export function createInfoRequest(data: Partial<InformationRequest>): Informatio
   };
   requests.push(ir);
   setStore('info_requests', requests);
+  logActivity('irl_sent', `IRL #${ir.request_number}: ${ir.title}`, { project_id: ir.project_id });
   return ir;
 }
 
@@ -518,6 +547,7 @@ export function createDDDocument(data: Partial<DDDocument>): DDDocument {
   };
   docs.push(doc);
   setStore('dd_documents', docs);
+  logActivity('document_uploaded', `Uploaded: ${doc.file_name}`, { project_id: doc.project_id });
   return doc;
 }
 

@@ -138,15 +138,77 @@ export default function TargetDetailPage() {
         </div>
       </div>
 
+      {/* Stage Pipeline */}
+      <div className="glass-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Pipeline Stage</span>
+            <span className="text-xs font-mono" style={{ color: 'var(--muted)' }}>
+              {Math.floor((Date.now() - new Date(target.stage_entered_at).getTime()) / 86400000)}d in stage
+            </span>
+          </div>
+          <select
+            value={target.stage}
+            onChange={e => {
+              updateTarget(id, { stage: e.target.value as Target['stage'] });
+              reload();
+            }}
+            className="text-xs"
+          >
+            {DEAL_STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-1">
+          {DEAL_STAGES.map((s, i) => {
+            const stageIdx = DEAL_STAGES.findIndex(st => st.key === target.stage);
+            const isPast = i < stageIdx;
+            const isCurrent = i === stageIdx;
+            return (
+              <div key={s.key} className="flex-1 flex flex-col items-center gap-1">
+                <div
+                  className="w-full h-2 rounded-full transition-all"
+                  style={{
+                    background: isPast ? s.color : isCurrent ? s.color : 'var(--border)',
+                    opacity: isPast ? 0.6 : isCurrent ? 1 : 0.3,
+                  }}
+                />
+                <span className="text-[9px] truncate w-full text-center" style={{
+                  color: isCurrent ? s.color : 'var(--muted)',
+                  fontWeight: isCurrent ? 600 : 400,
+                }}>
+                  {s.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Key Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
         <MetricCard label="Revenue" value={target.revenue ? `$${(target.revenue / 1000000).toFixed(1)}M` : '-'} />
         <MetricCard label="ARR" value={target.arr ? `$${(target.arr / 1000000).toFixed(1)}M` : '-'} />
         <MetricCard label="Recurring %" value={target.recurring_revenue_pct ? `${target.recurring_revenue_pct}%` : '-'} />
         <MetricCard label="Gross Margin" value={target.gross_margin_pct ? `${target.gross_margin_pct}%` : '-'} />
         <MetricCard label="EBITA Margin" value={target.ebita_margin_pct ? `${target.ebita_margin_pct}%` : '-'} />
+        <MetricCard label="Customers" value={target.customer_count?.toLocaleString() || '-'} />
+        <MetricCard label="YoY Growth" value={target.yoy_growth_pct ? `${target.yoy_growth_pct}%` : '-'} />
         <MetricCard label="Score" value={target.weighted_score?.toFixed(1) || '-'} highlight />
       </div>
+
+      {/* Description & Notes */}
+      {(target.description || target.notes) && (
+        <div className="glass-card p-4">
+          {target.description && (
+            <div className="text-sm mb-2">{target.description}</div>
+          )}
+          {target.notes && (
+            <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+              <span className="font-medium">Notes:</span> {target.notes}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 p-1 rounded-lg w-fit" style={{ background: 'var(--card)' }}>

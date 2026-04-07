@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0a0e17"/>
+  <rect x="40" y="40" width="432" height="432" rx="72" fill="#111827"/>
+  <text x="256" y="320" font-family="system-ui, -apple-system, sans-serif" font-size="240" font-weight="800" fill="#3b82f6" text-anchor="middle" letter-spacing="-10">DF</text>
+  <rect x="40" y="440" width="432" height="32" rx="16" fill="#3b82f6" opacity="0.3"/>
+  <rect x="40" y="440" width="280" height="32" rx="16" fill="#3b82f6"/>
+</svg>
