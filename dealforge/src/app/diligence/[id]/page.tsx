@@ -164,6 +164,17 @@ export default function DDProjectDetailPage() {
           >
             <FileText size={14} /> Status Report
           </button>
+          <button
+            onClick={async () => {
+              const { generateDataRoomChecklist } = await import('@/lib/data-room-checklist');
+              const html = generateDataRoomChecklist(project.target_name, project.phase);
+              const win = window.open('', '_blank');
+              if (win) { win.document.write(html); win.document.close(); }
+            }}
+            className="btn btn-secondary btn-sm"
+          >
+            <CheckCircle2 size={14} /> Data Room Checklist
+          </button>
         </div>
       </div>
 

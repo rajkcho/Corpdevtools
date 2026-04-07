@@ -128,6 +128,95 @@ export default function AnalyticsPage() {
         <KPI label="Proprietary Sourcing" value={`${proprietaryRatio}%`} sub="VMS benchmark: 60-70%" icon={<Users size={16} />} color={proprietaryRatio >= 60 ? 'var(--success)' : 'var(--warning)'} />
       </div>
 
+      {/* Weighted Pipeline Forecast */}
+      {(() => {
+        const STAGE_PROBABILITY: Record<DealStage, number> = {
+          identified: 0.05, researching: 0.10, contacted: 0.15, nurturing: 0.25,
+          loi_submitted: 0.40, loi_signed: 0.60, due_diligence: 0.75, closing: 0.90,
+          closed_won: 1.0, closed_lost: 0,
+        };
+
+        const activeWithPrice = targets.filter(t => !['closed_won', 'closed_lost'].includes(t.stage) && t.asking_price);
+        if (activeWithPrice.length < 1) return null;
+
+        const forecastByStage = DEAL_STAGES
+          .filter(s => !['closed_won', 'closed_lost'].includes(s.key))
+          .map(s => {
+            const stageTargets = activeWithPrice.filter(t => t.stage === s.key);
+            const rawValue = stageTargets.reduce((sum, t) => sum + (t.asking_price || 0), 0);
+            const prob = STAGE_PROBABILITY[s.key];
+            return { ...s, count: stageTargets.length, rawValue, prob, weightedValue: rawValue * prob };
+          })
+          .filter(s => s.count > 0);
+
+        const totalRaw = forecastByStage.reduce((s, x) => s + x.rawValue, 0);
+        const totalWeighted = forecastByStage.reduce((s, x) => s + x.weightedValue, 0);
+        const maxRaw = Math.max(...forecastByStage.map(s => s.rawValue), 1);
+
+        return (
+          <div className="glass-card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-semibold flex items-center gap-2">
+                  <TrendingUp size={16} style={{ color: 'var(--success)' }} /> Weighted Pipeline Forecast
+                </h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>Stage-weighted probability model for active pipeline</p>
+              </div>
+              <div className="text-right">
+                <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Expected Close Value</div>
+                <div className="text-xl font-bold font-mono" style={{ color: 'var(--success)' }}>{fmt(totalWeighted, '$')}</div>
+                <div className="text-xs" style={{ color: 'var(--muted)' }}>of {fmt(totalRaw, '$')} raw pipeline</div>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <th className="text-left p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Stage</th>
+                    <th className="text-center p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Deals</th>
+                    <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Raw Value</th>
+                    <th className="text-center p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Prob.</th>
+                    <th className="text-right p-2 text-xs" style={{ color: 'var(--success)' }}>Weighted</th>
+                    <th className="p-2 text-xs w-32" style={{ color: 'var(--muted-foreground)' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {forecastByStage.map(s => (
+                    <tr key={s.key} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td className="p-2">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+                          {s.label}
+                        </span>
+                      </td>
+                      <td className="p-2 text-center font-mono">{s.count}</td>
+                      <td className="p-2 text-right font-mono">{fmt(s.rawValue, '$')}</td>
+                      <td className="p-2 text-center font-mono" style={{ color: 'var(--accent)' }}>{Math.round(s.prob * 100)}%</td>
+                      <td className="p-2 text-right font-mono font-bold" style={{ color: 'var(--success)' }}>{fmt(s.weightedValue, '$')}</td>
+                      <td className="p-2">
+                        <div className="h-4 rounded overflow-hidden" style={{ background: 'var(--background)' }}>
+                          <div className="h-full rounded" style={{ width: `${(s.rawValue / maxRaw) * 100}%`, background: s.color, opacity: 0.7 }} />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ borderTop: '2px solid var(--border)' }}>
+                    <td className="p-2 font-bold">Total</td>
+                    <td className="p-2 text-center font-mono font-bold">{activeWithPrice.length}</td>
+                    <td className="p-2 text-right font-mono font-bold">{fmt(totalRaw, '$')}</td>
+                    <td className="p-2 text-center font-mono" style={{ color: 'var(--accent)' }}>{totalRaw > 0 ? `${Math.round((totalWeighted / totalRaw) * 100)}%` : '—'}</td>
+                    <td className="p-2 text-right font-mono font-bold" style={{ color: 'var(--success)' }}>{fmt(totalWeighted, '$')}</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Pipeline by Stage */}
         <div className="glass-card p-5">

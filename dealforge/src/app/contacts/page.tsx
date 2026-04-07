@@ -3,12 +3,12 @@
 import { useEffect, useState, useMemo } from 'react';
 import { getContacts, getTargets, getTouchpoints, updateContact } from '@/lib/db';
 import type { Contact, Target, Touchpoint } from '@/lib/types';
-import { Users, Search, Mail, Phone, Building2, Star, ExternalLink, Edit2, Check, X, ChevronDown, Link2 } from 'lucide-react';
+import { Users, Search, Mail, Phone, Building2, Star, ExternalLink, Edit2, Check, X, ChevronDown, Link2, Signal } from 'lucide-react';
 import Link from 'next/link';
 import { DEAL_STAGES } from '@/lib/types';
 
 type ViewMode = 'table' | 'cards';
-type SortField = 'name' | 'company' | 'stage' | 'lastContact' | 'title';
+type SortField = 'name' | 'company' | 'stage' | 'lastContact' | 'title' | 'strength';
 
 export default function ContactsPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -58,6 +58,70 @@ export default function ContactsPage() {
       .slice(0, 5);
   };
 
+  const getRelationshipStrength = (c: Contact): number => {
+    let score = 0;
+
+    // Touchpoint count: up to 30 points (1 tp = 3 pts, max at 10+)
+    const tps = touchpointsByTarget.get(c.target_id) || [];
+    score += Math.min(30, tps.length * 3);
+
+    // Recency of last contact: up to 30 points
+    const lastDate = getLastContactDate(c);
+    if (lastDate) {
+      const daysSince = Math.floor((Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysSince <= 7) score += 30;
+      else if (daysSince <= 14) score += 25;
+      else if (daysSince <= 30) score += 20;
+      else if (daysSince <= 60) score += 12;
+      else if (daysSince <= 90) score += 6;
+      // >90 days = 0
+    }
+
+    // Primary contact: 15 points
+    if (c.is_primary) score += 15;
+
+    // Contact info completeness: up to 15 points (5 each)
+    if (c.email) score += 5;
+    if (c.phone) score += 5;
+    if (c.linkedin) score += 5;
+
+    // Deal stage advancement: up to 10 points
+    const target = targetMap.get(c.target_id);
+    if (target) {
+      const stageOrder = DEAL_STAGES.map(s => s.key);
+      const idx = stageOrder.indexOf(target.stage);
+      // 10 stages, scale index to 10 points
+      score += Math.min(10, Math.round((idx / Math.max(stageOrder.length - 1, 1)) * 10));
+    }
+
+    return Math.min(100, score);
+  };
+
+  const getStrengthInfo = (score: number) => {
+    if (score >= 80) return { label: 'Strong', color: 'var(--success)', bg: 'var(--success)' };
+    if (score >= 50) return { label: 'Moderate', color: 'var(--warning)', bg: 'var(--warning)' };
+    if (score >= 20) return { label: 'Weak', color: '#F97316', bg: '#F97316' };
+    return { label: 'Cold', color: 'var(--danger)', bg: 'var(--danger)' };
+  };
+
+  const StrengthBadge = ({ contact }: { contact: Contact }) => {
+    const score = getRelationshipStrength(contact);
+    const info = getStrengthInfo(score);
+    return (
+      <div className="flex items-center gap-1.5" title={`Relationship Strength: ${score}/100 (${info.label})`}>
+        <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--background)' }}>
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${score}%`, background: info.bg }}
+          />
+        </div>
+        <span className="text-[10px] font-medium whitespace-nowrap" style={{ color: info.color }}>
+          {score}
+        </span>
+      </div>
+    );
+  };
+
   // Extract unique roles/titles
   const roles = useMemo(() =>
     Array.from(new Set(contacts.map(c => c.title).filter(Boolean))).sort(),
@@ -102,10 +166,27 @@ export default function ContactsPage() {
             cmp = dateA - dateB;
             break;
           }
+          case 'strength': {
+            cmp = getRelationshipStrength(a) - getRelationshipStrength(b);
+            break;
+          }
         }
         return sortAsc ? cmp : -cmp;
       });
   }, [contacts, targetMap, search, filterRole, filterStage, sortField, sortAsc, touchpointsByTarget]);
+
+  // Relationship strength stats
+  const strengthCounts = useMemo(() => {
+    const counts = { strong: 0, moderate: 0, weak: 0, cold: 0 };
+    for (const c of contacts) {
+      const score = getRelationshipStrength(c);
+      if (score >= 80) counts.strong++;
+      else if (score >= 50) counts.moderate++;
+      else if (score >= 20) counts.weak++;
+      else counts.cold++;
+    }
+    return counts;
+  }, [contacts, touchpointsByTarget, targetMap]);
 
   // Stats
   const primaryCount = contacts.filter(c => c.is_primary).length;
@@ -212,6 +293,32 @@ export default function ContactsPage() {
         </div>
       </div>
 
+      {/* Relationship Strength Summary */}
+      {contacts.length > 0 && (
+        <div className="glass-card p-3 flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>
+            <Signal size={13} />
+            Relationships:
+          </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="w-2 h-2 rounded-full" style={{ background: 'var(--success)' }} />
+            <span style={{ color: 'var(--success)' }}>{strengthCounts.strong} strong</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="w-2 h-2 rounded-full" style={{ background: 'var(--warning)' }} />
+            <span style={{ color: 'var(--warning)' }}>{strengthCounts.moderate} moderate</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="w-2 h-2 rounded-full" style={{ background: '#F97316' }} />
+            <span style={{ color: '#F97316' }}>{strengthCounts.weak} weak</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="w-2 h-2 rounded-full" style={{ background: 'var(--danger)' }} />
+            <span style={{ color: 'var(--danger)' }}>{strengthCounts.cold} cold</span>
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-sm">
@@ -249,6 +356,7 @@ export default function ContactsPage() {
                 <SortHeader field="company" label="Company" />
                 <SortHeader field="stage" label="Stage" />
                 <th className="text-left p-3 text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Contact Info</th>
+                <SortHeader field="strength" label="Strength" />
                 <SortHeader field="lastContact" label="Last Interaction" />
                 <th className="text-left p-3 text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Notes</th>
               </tr>
@@ -321,6 +429,9 @@ export default function ContactsPage() {
                         )}
                       </td>
                       <td className="p-3">
+                        <StrengthBadge contact={c} />
+                      </td>
+                      <td className="p-3">
                         <div className="flex items-center gap-2">
                           {c.email && (
                             <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} title={c.email}>
@@ -361,7 +472,7 @@ export default function ContactsPage() {
                     {/* Expanded detail row */}
                     {isExpanded && (
                       <tr key={`${c.id}-detail`} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td colSpan={7} className="p-0">
+                        <td colSpan={8} className="p-0">
                           <div className="p-4 space-y-3" style={{ background: 'var(--background)' }}>
                             <div className="grid grid-cols-2 gap-4">
                               {/* Contact details */}
@@ -512,6 +623,9 @@ export default function ContactsPage() {
                       {c.is_primary && <Star size={10} fill="var(--warning)" style={{ color: 'var(--warning)' }} />}
                     </div>
                     <div className="text-xs" style={{ color: 'var(--muted)' }}>{c.title || 'No title'}</div>
+                    <div className="mt-1">
+                      <StrengthBadge contact={c} />
+                    </div>
                     {target && (
                       <div className="flex items-center gap-2 mt-1">
                         <Link
