@@ -7,6 +7,7 @@ import type { Target, Touchpoint, DDProject, DealStage } from '@/lib/types';
 import { getActivities } from '@/lib/db';
 import type { ActivityEntry } from '@/lib/types';
 import { TrendingUp, Clock, Users, DollarSign, Activity, BarChart3, ArrowRight, AlertTriangle, MapPin, Calendar } from 'lucide-react';
+import Link from 'next/link';
 
 function fmt(n: number, prefix = ''): string {
   if (n >= 1_000_000) return `${prefix}${(n / 1_000_000).toFixed(1)}M`;
@@ -921,6 +922,143 @@ export default function AnalyticsPage() {
           </div>
         </div>
       )}
+      {/* Revenue vs Score Scatter */}
+      {targets.filter(t => t.revenue && t.weighted_score).length >= 3 && (
+        <div className="glass-card p-5">
+          <h2 className="font-semibold mb-1 flex items-center gap-2">
+            <Activity size={16} style={{ color: 'var(--accent)' }} /> Revenue vs. Score Map
+          </h2>
+          <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>
+            Each dot represents a target. Size indicates customer count. Position shows deal quality vs. revenue scale.
+          </p>
+          <div className="relative" style={{ height: '250px' }}>
+            {/* Y-axis labels */}
+            <div className="absolute left-0 top-0 bottom-4 flex flex-col justify-between text-[9px]" style={{ color: 'var(--muted)', width: '30px' }}>
+              <span>5.0</span>
+              <span>4.0</span>
+              <span>3.0</span>
+              <span>2.0</span>
+              <span>1.0</span>
+            </div>
+            <div className="absolute top-0 bottom-0 right-0" style={{ left: '35px' }}>
+              {/* Grid lines */}
+              {[1, 2, 3, 4, 5].map(v => (
+                <div key={v} className="absolute left-0 right-0 border-b" style={{ bottom: `${((v - 1) / 4) * 100}%`, borderColor: 'var(--border)', opacity: 0.3 }} />
+              ))}
+              {/* Dots */}
+              {(() => {
+                const withData = targets.filter(t => t.revenue && t.weighted_score);
+                const maxRev = Math.max(...withData.map(t => t.revenue || 0));
+                const maxCustomers = Math.max(...withData.map(t => t.customer_count || 50));
+                return withData.map(t => {
+                  const x = ((t.revenue || 0) / maxRev) * 90 + 5; // 5-95% range
+                  const y = ((t.weighted_score || 1) - 1) / 4 * 100; // 0-100% from bottom
+                  const size = Math.max(8, Math.min(24, ((t.customer_count || 50) / maxCustomers) * 24));
+                  const stageInfo = DEAL_STAGES.find(s => s.key === t.stage);
+                  return (
+                    <Link
+                      key={t.id}
+                      href={`/targets/${t.id}`}
+                      className="absolute rounded-full transition-all hover:scale-125"
+                      style={{
+                        left: `${x}%`,
+                        bottom: `${y}%`,
+                        width: `${size}px`,
+                        height: `${size}px`,
+                        background: stageInfo?.color || 'var(--accent)',
+                        opacity: 0.7,
+                        transform: 'translate(-50%, 50%)',
+                      }}
+                      title={`${t.name}: ${t.weighted_score?.toFixed(1)} score, $${((t.revenue || 0) / 1_000_000).toFixed(1)}M revenue`}
+                    />
+                  );
+                });
+              })()}
+            </div>
+            {/* X-axis label */}
+            <div className="absolute bottom-0 left-9 right-0 text-center text-[9px]" style={{ color: 'var(--muted)' }}>
+              Revenue →
+            </div>
+          </div>
+          <div className="flex items-center justify-center gap-4 mt-2 flex-wrap">
+            {DEAL_STAGES.filter(s => targets.some(t => t.stage === s.key && t.revenue && t.weighted_score)).map(s => (
+              <div key={s.key} className="flex items-center gap-1 text-[10px]">
+                <div className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+                <span style={{ color: 'var(--muted)' }}>{s.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Deal Velocity — Average days per stage */}
+      {(() => {
+        const stageChanges = typeof window !== 'undefined'
+          ? JSON.parse(localStorage.getItem('dealforge_stage_history') || '[]')
+          : [];
+        if (stageChanges.length < 3) return null;
+
+        const daysPerStage: Record<string, number[]> = {};
+        // Group consecutive stage changes by target to calculate time in each stage
+        const byTarget = new Map<string, typeof stageChanges>();
+        for (const sc of stageChanges) {
+          const arr = byTarget.get(sc.target_id) || [];
+          arr.push(sc);
+          byTarget.set(sc.target_id, arr);
+        }
+        for (const [, changes] of byTarget) {
+          changes.sort((a: { changed_at: string }, b: { changed_at: string }) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime());
+          for (let i = 0; i < changes.length; i++) {
+            const fromStage = changes[i].from_stage;
+            const startDate = i > 0 ? new Date(changes[i - 1].changed_at) : new Date(changes[i].changed_at);
+            const endDate = new Date(changes[i].changed_at);
+            const days = Math.max(1, Math.floor((endDate.getTime() - startDate.getTime()) / 86400000));
+            if (!daysPerStage[fromStage]) daysPerStage[fromStage] = [];
+            daysPerStage[fromStage].push(days);
+          }
+        }
+
+        const avgDays = DEAL_STAGES
+          .filter(s => !['closed_won', 'closed_lost'].includes(s.key))
+          .map(s => ({
+            ...s,
+            avg: daysPerStage[s.key] ? Math.round(daysPerStage[s.key].reduce((a, b) => a + b, 0) / daysPerStage[s.key].length) : null,
+            count: daysPerStage[s.key]?.length || 0,
+          }))
+          .filter(s => s.avg !== null);
+
+        if (avgDays.length === 0) return null;
+        const maxDays = Math.max(...avgDays.map(s => s.avg || 0), 1);
+
+        return (
+          <div className="glass-card p-5">
+            <h2 className="font-semibold mb-1 flex items-center gap-2">
+              <Clock size={16} style={{ color: 'var(--accent)' }} /> Deal Velocity
+            </h2>
+            <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>Average days in each pipeline stage</p>
+            <div className="space-y-3">
+              {avgDays.map(s => (
+                <div key={s.key} className="flex items-center gap-3">
+                  <span className="w-24 text-xs text-right" style={{ color: 'var(--muted-foreground)' }}>{s.label}</span>
+                  <div className="flex-1 h-7 rounded-lg overflow-hidden relative" style={{ background: 'var(--background)' }}>
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-lg flex items-center px-2 transition-all"
+                      style={{ width: `${Math.max(((s.avg || 0) / maxDays) * 100, 10)}%`, background: `${s.color}55` }}
+                    >
+                      <span className="text-xs font-bold whitespace-nowrap" style={{ color: s.color }}>
+                        {s.avg}d avg
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-xs w-16 text-right" style={{ color: 'var(--muted)' }}>
+                    {s.count} deal{s.count !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
