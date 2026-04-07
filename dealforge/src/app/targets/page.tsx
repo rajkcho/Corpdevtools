@@ -334,11 +334,12 @@ export default function TargetsPage() {
                     {daysInStage}d
                   </span>
                 </div>
-                <div className="flex items-center gap-4 mt-3 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                <div className="flex items-center gap-4 mt-3 text-xs flex-wrap" style={{ color: 'var(--muted-foreground)' }}>
                   {t.revenue ? <span>Rev: ${(t.revenue / 1000000).toFixed(1)}M</span> : null}
                   {t.arr ? <span>ARR: ${(t.arr / 1000000).toFixed(1)}M</span> : null}
                   {t.recurring_revenue_pct ? <span>{t.recurring_revenue_pct}% recurring</span> : null}
                   {t.asking_price ? <span style={{ color: 'var(--success)' }}>Ask: ${(t.asking_price / 1000000).toFixed(1)}M</span> : null}
+                  {t.asking_price && t.arr ? <span className="font-mono">{(t.asking_price / t.arr).toFixed(1)}x ARR</span> : null}
                   {t.customer_count ? <span>{t.customer_count} customers</span> : null}
                 </div>
                 {t.tags && t.tags.length > 0 && (
