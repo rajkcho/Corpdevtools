@@ -8,10 +8,12 @@ import { DEAL_STAGES, VERTICALS } from '@/lib/types';
 import type { Target, DealStage } from '@/lib/types';
 import Modal from '@/components/Modal';
 import TargetForm from '@/components/TargetForm';
+import BulkImport from '@/components/BulkImport';
 
 export default function TargetsPage() {
   const [targets, setTargets] = useState<Target[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'updated_at' | 'weighted_score' | 'revenue'>('updated_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -116,26 +118,9 @@ export default function TargetsPage() {
           <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>{targets.length} companies tracked</p>
         </div>
         <div className="flex gap-2">
-          <label className="btn btn-secondary btn-sm cursor-pointer">
-            <Upload size={14} /> Import CSV
-            <input
-              type="file"
-              accept=".csv"
-              className="hidden"
-              onChange={e => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = ev => {
-                  const count = importTargetsFromCSV(ev.target?.result as string);
-                  alert(`Imported ${count} target(s).`);
-                  reload();
-                };
-                reader.readAsText(file);
-                e.target.value = '';
-              }}
-            />
-          </label>
+          <button onClick={() => setShowBulkImport(true)} className="btn btn-secondary btn-sm">
+            <Upload size={14} /> Bulk Import
+          </button>
           <button onClick={handleExport} className="btn btn-secondary btn-sm">
             <Download size={14} /> Export CSV
           </button>
@@ -447,6 +432,10 @@ export default function TargetsPage() {
           submitLabel="Create Target"
         />
       </Modal>
+
+      {showBulkImport && (
+        <BulkImport onClose={() => setShowBulkImport(false)} onComplete={reload} />
+      )}
     </div>
   );
 }
