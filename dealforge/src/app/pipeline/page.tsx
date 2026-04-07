@@ -306,10 +306,19 @@ export default function PipelinePage() {
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1 mt-1.5">
+                        <div className="flex items-center gap-1 mt-1.5 flex-wrap">
                           <span className="badge" style={{ background: 'var(--accent-muted)', color: 'var(--accent)', fontSize: '0.65rem' }}>
                             {target.source}
                           </span>
+                          {target.recurring_revenue_pct && (
+                            <span className="badge" style={{
+                              background: target.recurring_revenue_pct >= 80 ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)',
+                              color: target.recurring_revenue_pct >= 80 ? 'var(--success)' : 'var(--warning)',
+                              fontSize: '0.65rem',
+                            }}>
+                              {target.recurring_revenue_pct}% rec
+                            </span>
+                          )}
                           {daysSinceStageEntry(target.stage_entered_at) > 30 && (
                             <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--warning)', fontSize: '0.65rem' }}>
                               {daysSinceStageEntry(target.stage_entered_at)}d

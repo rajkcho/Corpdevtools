@@ -390,6 +390,32 @@ export default function TargetDetailPage() {
         </div>
       )}
 
+      {/* Stage-based Next Steps */}
+      {(() => {
+        const suggestions: Record<string, string[]> = {
+          identified: ['Research the company and market', 'Identify key contacts', 'Review public financials if available', 'Score acquisition fit criteria'],
+          researching: ['Complete initial financial analysis', 'Identify primary decision-maker', 'Prepare outreach strategy', 'Score target on VMS criteria'],
+          contacted: ['Schedule management presentation', 'Request initial financial package', 'Log all touchpoints', 'Build relationship with founder/CEO'],
+          nurturing: ['Maintain regular touchpoints', 'Gather financial data for modeling', 'Draft preliminary valuation', 'Identify potential deal-breakers early'],
+          loi_submitted: ['Follow up on LOI response', 'Prepare DD plan', 'Line up DD team resources', 'Start legal review of key contracts'],
+          loi_signed: ['Kick off due diligence', 'Set up data room access', 'Begin financial normalization', 'Schedule customer reference calls'],
+          due_diligence: ['Complete all DD workstreams', 'Draft IC memo', 'Identify and mitigate key risks', 'Negotiate definitive agreement'],
+          closing: ['Finalize SPA', 'Complete closing conditions', 'Plan Day 1 integration', 'Prepare closing documents'],
+        };
+        const items = suggestions[target.stage];
+        if (!items || ['closed_won', 'closed_lost'].includes(target.stage)) return null;
+        return (
+          <div className="flex items-start gap-3 p-3 rounded-lg text-sm" style={{ background: 'var(--accent-muted)', border: '1px solid rgba(59,130,246,0.1)' }}>
+            <span className="text-xs font-medium flex-shrink-0 mt-0.5" style={{ color: 'var(--accent)' }}>Next steps:</span>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {items.map((item, i) => (
+                <span key={i} className="text-xs" style={{ color: 'var(--muted-foreground)' }}>• {item}</span>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Tabs */}
       <div className="flex gap-1 p-1 rounded-lg w-fit" style={{ background: 'var(--card)' }}>
         {([
