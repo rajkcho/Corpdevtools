@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Target, FileSearch, BarChart3, ArrowUpDown, Settings, LayoutDashboard, Clock, Mail, Keyboard, Calculator, Building2, Map } from 'lucide-react';
+import { Search, Target, FileSearch, BarChart3, ArrowUpDown, Settings, LayoutDashboard, Clock, Mail, Keyboard, Calculator, Building2, Map, Rocket } from 'lucide-react';
 import { getTargets, getDDProjects, getContacts, getTouchpoints } from '@/lib/db';
 import type { Target as TargetType, DDProject, Contact, Touchpoint } from '@/lib/types';
 import { Users, MessageSquare } from 'lucide-react';
@@ -29,6 +29,7 @@ const PAGES: SearchResult[] = [
   { id: 'reports', type: 'page', label: 'Deal Flow Reports', href: '/reports', icon: <FileSearch size={16} /> },
   { id: 'market-map', type: 'page', label: 'Market Map', href: '/market-map', icon: <Map size={16} /> },
   { id: 'benchmarks', type: 'page', label: 'VMS Benchmarks', href: '/benchmarks', icon: <BarChart3 size={16} /> },
+  { id: 'integration', type: 'page', label: 'Integration Planning', href: '/integration', icon: <Rocket size={16} /> },
   { id: 'activity', type: 'page', label: 'Activity Feed', href: '/activity', icon: <Clock size={16} /> },
   { id: 'settings', type: 'page', label: 'Settings', href: '/settings', icon: <Settings size={16} /> },
 ];

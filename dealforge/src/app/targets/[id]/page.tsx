@@ -26,6 +26,7 @@ import Modal from '@/components/Modal';
 import TargetForm from '@/components/TargetForm';
 import RadarChart from '@/components/RadarChart';
 import ScoringWizard from '@/components/ScoringWizard';
+import RelationshipTimeline from '@/components/RelationshipTimeline';
 
 const TOUCHPOINT_ICONS: Record<string, React.ReactNode> = {
   email: <Mail size={14} />,
@@ -495,61 +496,91 @@ export default function TargetDetailPage() {
               <Plus size={14} /> Log Touchpoint
             </button>
           </div>
-          {touchpoints.length === 0 ? (
-            <div className="glass-card p-8 text-center" style={{ color: 'var(--muted)' }}>
-              No touchpoints logged yet. Start tracking your relationship with this target.
+
+          {/* Enhanced Relationship Timeline */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1 glass-card p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--muted)' }}>
+                Visual Timeline
+              </h3>
+              <RelationshipTimeline
+                touchpoints={touchpoints}
+                contacts={contacts}
+                stageHistory={getStageHistory(id)}
+                targetCreatedAt={target.created_at}
+              />
             </div>
-          ) : (
-            <div className="relative pl-6 space-y-4">
-              <div className="absolute left-2.5 top-2 bottom-2 w-px" style={{ background: 'var(--border)' }} />
-              {touchpoints.map(tp => (
-                <div key={tp.id} className="relative">
-                  <div className="absolute -left-6 top-3 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: 'var(--card)', border: '2px solid var(--border)' }}>
-                    <div className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} />
-                  </div>
-                  <div className="glass-card p-4 ml-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="flex items-center gap-1 badge capitalize" style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>
-                          {TOUCHPOINT_ICONS[tp.type]}{tp.type}
-                        </span>
-                        <span className="text-sm font-medium">{tp.subject}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs" style={{ color: 'var(--muted)' }}>
-                          {new Date(tp.date).toLocaleDateString()}
-                        </span>
-                        <button onClick={() => { deleteTouchpoint(tp.id); reload(); }} className="btn-ghost p-1 rounded">
-                          <Trash2 size={12} style={{ color: 'var(--muted)' }} />
-                        </button>
-                      </div>
-                    </div>
-                    {tp.summary && <p className="text-sm mt-2" style={{ color: 'var(--muted-foreground)' }}>{tp.summary}</p>}
-                    {tp.participants && <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Participants: {tp.participants}</p>}
-                    {tp.follow_up_date && (() => {
-                      const isOverdue = new Date(tp.follow_up_date).getTime() < Date.now();
-                      const daysUntil = Math.floor((new Date(tp.follow_up_date).getTime() - Date.now()) / 86400000);
+
+            <div className="lg:col-span-2 space-y-3">
+              {/* Touchpoint stats */}
+              {touchpoints.length > 0 && (
+                <div className="glass-card p-4">
+                  <div className="grid grid-cols-4 gap-3">
+                    {['email', 'call', 'meeting', 'other'].map(type => {
+                      const count = touchpoints.filter(tp => type === 'other' ? !['email', 'call', 'meeting'].includes(tp.type) : tp.type === type).length;
                       return (
-                        <div className="text-xs mt-2 p-2 rounded flex items-center gap-2" style={{
-                          background: isOverdue ? 'rgba(239,68,68,0.1)' : 'var(--background)',
-                          color: isOverdue ? 'var(--danger)' : 'var(--warning)',
-                        }}>
-                          <Calendar size={12} />
-                          <span className="font-medium">
-                            {isOverdue ? `Overdue by ${Math.abs(daysUntil)}d` : daysUntil === 0 ? 'Due today' : `Due in ${daysUntil}d`}
-                          </span>
-                          <span style={{ color: 'var(--muted-foreground)' }}>
-                            {new Date(tp.follow_up_date).toLocaleDateString()}
-                            {tp.follow_up_notes && ` — ${tp.follow_up_notes}`}
-                          </span>
+                        <div key={type} className="text-center p-2 rounded-lg" style={{ background: 'var(--background)' }}>
+                          <div className="text-lg font-bold font-mono" style={{ color: 'var(--accent)' }}>{count}</div>
+                          <div className="text-[10px] capitalize" style={{ color: 'var(--muted)' }}>{type === 'other' ? 'Other' : `${type}s`}</div>
                         </div>
                       );
-                    })()}
+                    })}
                   </div>
                 </div>
-              ))}
+              )}
+
+              {/* Detailed touchpoint list */}
+              {touchpoints.length === 0 ? (
+                <div className="glass-card p-8 text-center" style={{ color: 'var(--muted)' }}>
+                  No touchpoints logged yet. Start tracking your relationship with this target.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {touchpoints.map(tp => (
+                    <div key={tp.id} className="glass-card p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="flex items-center gap-1 badge capitalize" style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>
+                            {TOUCHPOINT_ICONS[tp.type]}{tp.type}
+                          </span>
+                          <span className="text-sm font-medium">{tp.subject}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                            {new Date(tp.date).toLocaleDateString()}
+                          </span>
+                          <button onClick={() => { deleteTouchpoint(tp.id); reload(); }} className="btn-ghost p-1 rounded">
+                            <Trash2 size={12} style={{ color: 'var(--muted)' }} />
+                          </button>
+                        </div>
+                      </div>
+                      {tp.summary && <p className="text-sm mt-2" style={{ color: 'var(--muted-foreground)' }}>{tp.summary}</p>}
+                      {tp.participants && <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Participants: {tp.participants}</p>}
+                      {tp.follow_up_date && (() => {
+                        const isOverdue = new Date(tp.follow_up_date).getTime() < Date.now();
+                        const daysUntil = Math.floor((new Date(tp.follow_up_date).getTime() - Date.now()) / 86400000);
+                        return (
+                          <div className="text-xs mt-2 p-2 rounded flex items-center gap-2" style={{
+                            background: isOverdue ? 'rgba(239,68,68,0.1)' : 'var(--background)',
+                            color: isOverdue ? 'var(--danger)' : 'var(--warning)',
+                          }}>
+                            <Calendar size={12} />
+                            <span className="font-medium">
+                              {isOverdue ? `Overdue by ${Math.abs(daysUntil)}d` : daysUntil === 0 ? 'Due today' : `Due in ${daysUntil}d`}
+                            </span>
+                            <span style={{ color: 'var(--muted-foreground)' }}>
+                              {new Date(tp.follow_up_date).toLocaleDateString()}
+                              {tp.follow_up_notes && ` — ${tp.follow_up_notes}`}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Stage Progression History */}
           {(() => {

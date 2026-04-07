@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   Target, KanbanSquare, FileSearch, AlertTriangle, DollarSign,
-  Clock, TrendingUp, Calendar, BarChart3, Plus, Mail, ArrowUpDown, Users, Star,
+  Clock, TrendingUp, Calendar, BarChart3, Plus, Mail, ArrowUpDown, Users, Star, FileText,
 } from 'lucide-react';
 import Link from 'next/link';
 import { getTargets, getDDProjects, getDDRisks, getTouchpoints, getDDFindings, getInfoRequests, getActivities, getContacts } from '@/lib/db';
@@ -12,6 +12,53 @@ import { DEAL_STAGES, VERTICALS } from '@/lib/types';
 import type { Target as TargetType, DDProject, DDRisk, Touchpoint, Contact } from '@/lib/types';
 import RAGDot from '@/components/RAGDot';
 import ProgressBar from '@/components/ProgressBar';
+
+function getDealHealth(
+  target: TargetType,
+  touchpoints: Touchpoint[],
+  contacts: Contact[],
+): { overall: number; signals: ('green' | 'yellow' | 'red')[]; labels: string[] } {
+  const signals: ('green' | 'yellow' | 'red')[] = [];
+  const labels: string[] = [];
+
+  // 1. Momentum: how recently the stage changed
+  const daysInStage = Math.floor((Date.now() - new Date(target.stage_entered_at).getTime()) / 86400000);
+  if (daysInStage <= 14) { signals.push('green'); }
+  else if (daysInStage <= 45) { signals.push('yellow'); }
+  else { signals.push('red'); }
+  labels.push(`${daysInStage}d in stage`);
+
+  // 2. Completeness: has score, contacts, financials
+  const hasScore = !!target.weighted_score;
+  const hasContacts = contacts.filter(c => c.target_id === target.id).length > 0;
+  const hasFinancials = !!(target.revenue || target.arr);
+  const completeness = [hasScore, hasContacts, hasFinancials].filter(Boolean).length;
+  if (completeness >= 3) { signals.push('green'); }
+  else if (completeness >= 2) { signals.push('yellow'); }
+  else { signals.push('red'); }
+  labels.push(`${completeness}/3 data complete`);
+
+  // 3. Engagement: recent touchpoints
+  const targetTPs = touchpoints.filter(tp => tp.target_id === target.id);
+  const recentTP = targetTPs.filter(tp => Date.now() - new Date(tp.date).getTime() < 30 * 86400000).length;
+  if (recentTP >= 2) { signals.push('green'); }
+  else if (recentTP >= 1) { signals.push('yellow'); }
+  else { signals.push('red'); }
+  labels.push(`${recentTP} touchpoints (30d)`);
+
+  // 4. Risk: overdue follow-ups
+  const overdueFollowups = targetTPs.filter(tp => tp.follow_up_date && new Date(tp.follow_up_date) < new Date()).length;
+  if (overdueFollowups === 0) { signals.push('green'); }
+  else if (overdueFollowups <= 1) { signals.push('yellow'); }
+  else { signals.push('red'); }
+  labels.push(`${overdueFollowups} overdue follow-ups`);
+
+  const scoreMap = { green: 100, yellow: 50, red: 10 };
+  const weights = [0.3, 0.25, 0.3, 0.15]; // momentum, completeness, engagement, risk
+  const overall = Math.round(signals.reduce((sum, s, i) => sum + scoreMap[s] * weights[i], 0));
+
+  return { overall, signals, labels };
+}
 
 export default function DashboardPage() {
   const [targets, setTargets] = useState<TargetType[]>([]);
@@ -133,6 +180,7 @@ export default function DashboardPage() {
         <Link href="/compare" className="btn btn-secondary btn-sm"><ArrowUpDown size={12} /> Compare</Link>
         <Link href="/outreach" className="btn btn-secondary btn-sm"><Mail size={12} /> Outreach</Link>
         <Link href="/analytics" className="btn btn-secondary btn-sm"><BarChart3 size={12} /> Analytics</Link>
+        <Link href="/reports" className="btn btn-secondary btn-sm"><FileText size={12} /> Reports</Link>
       </div>
 
       {/* Watchlist */}
@@ -234,6 +282,77 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Deal Health Cards */}
+      {activeTargets.length > 0 && (
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold flex items-center gap-2">
+              <TrendingUp size={16} style={{ color: 'var(--accent)' }} /> Deal Health Monitor
+            </h2>
+            <Link href="/targets" className="text-xs font-medium" style={{ color: 'var(--accent)' }}>View All</Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {activeTargets
+              .filter(t => !['identified'].includes(t.stage))
+              .sort((a, b) => {
+                // Sort by health: worst first
+                const scoreA = getDealHealth(a, touchpoints, allContacts);
+                const scoreB = getDealHealth(b, touchpoints, allContacts);
+                return scoreA.overall - scoreB.overall;
+              })
+              .slice(0, 8)
+              .map(t => {
+                const health = getDealHealth(t, touchpoints, allContacts);
+                const stage = DEAL_STAGES.find(s => s.key === t.stage);
+                return (
+                  <Link
+                    key={t.id}
+                    href={`/targets/${t.id}`}
+                    className="p-3 rounded-lg transition-colors border"
+                    style={{
+                      background: 'var(--background)',
+                      borderColor: health.overall >= 70 ? 'rgba(16,185,129,0.2)' : health.overall >= 40 ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.2)',
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium truncate flex-1">{t.name}</span>
+                      <span
+                        className="text-xs font-bold font-mono ml-2"
+                        style={{ color: health.overall >= 70 ? 'var(--success)' : health.overall >= 40 ? 'var(--warning)' : 'var(--danger)' }}
+                      >
+                        {health.overall}
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full mb-2" style={{ background: 'var(--border)' }}>
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${health.overall}%`,
+                          background: health.overall >= 70 ? 'var(--success)' : health.overall >= 40 ? 'var(--warning)' : 'var(--danger)',
+                        }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="badge text-[9px]" style={{ background: `${stage?.color}20`, color: stage?.color }}>{stage?.label}</span>
+                      <div className="flex items-center gap-1">
+                        {health.signals.map((sig, i) => (
+                          <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: sig === 'green' ? 'var(--success)' : sig === 'yellow' ? 'var(--warning)' : 'var(--danger)' }} title={health.labels[i]} />
+                        ))}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+          </div>
+          <div className="flex items-center gap-4 mt-3 text-[10px]" style={{ color: 'var(--muted)' }}>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--success)' }} /> Momentum</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--warning)' }} /> Completeness</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} /> Engagement</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--danger)' }} /> Risk</span>
+          </div>
+        </div>
+      )}
 
       {/* Second Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

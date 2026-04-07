@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { getTargets, getTouchpoints, getDDProjects, getActivities } from '@/lib/db';
 import { DEAL_STAGES } from '@/lib/types';
 import type { Target, Touchpoint, DDProject, ActivityEntry } from '@/lib/types';
-import { FileText, Printer, Calendar, TrendingUp, BarChart3, ArrowRight, Download } from 'lucide-react';
+import { FileText, Printer, Calendar, TrendingUp, BarChart3, ArrowRight, Download, FileOutput } from 'lucide-react';
 
 function fmt(n: number, prefix = '$'): string {
   if (n >= 1_000_000) return `${prefix}${(n / 1_000_000).toFixed(1)}M`;
@@ -179,6 +179,19 @@ export default function ReportsPage() {
           </select>
           <button onClick={handleExportReport} className="btn btn-secondary btn-sm">
             <Download size={14} /> Export
+          </button>
+          <button
+            onClick={async () => {
+              const { generateExecutiveSummary } = await import('@/lib/executive-summary');
+              const periodMap: Record<string, '7d' | '14d' | '30d'> = { qtd: '30d', ytd: '30d', '3m': '30d', '6m': '30d', '12m': '30d', all: '30d' };
+              const digestPeriod = period === 'qtd' || period === 'ytd' ? '30d' : period === '3m' ? '30d' : '7d';
+              const html = generateExecutiveSummary(digestPeriod);
+              const win = window.open('', '_blank');
+              if (win) { win.document.write(html); win.document.close(); }
+            }}
+            className="btn btn-primary btn-sm"
+          >
+            <FileOutput size={14} /> Executive Summary
           </button>
           <button onClick={() => window.print()} className="btn btn-secondary btn-sm">
             <Printer size={14} /> Print
