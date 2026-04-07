@@ -1,18 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getActivities } from '@/lib/db';
-import type { ActivityEntry, ActivityType } from '@/lib/types';
+import { getActivities, getTargets } from '@/lib/db';
+import type { ActivityEntry, ActivityType, Target } from '@/lib/types';
 import Link from 'next/link';
 import {
-  Target, FileSearch, Users, TrendingUp, FileText, AlertTriangle,
-  Send, Upload, Clock, CheckCircle2, Plus, Filter,
+  Target as TargetIcon, FileSearch, Users, TrendingUp, FileText, AlertTriangle,
+  Send, Upload, Clock, CheckCircle2, Plus, Filter, Search, BarChart3,
 } from 'lucide-react';
 
 const TYPE_CONFIG: Record<ActivityType, { icon: React.ReactNode; color: string; label: string }> = {
   target_created: { icon: <Plus size={14} />, color: 'var(--success)', label: 'Target Created' },
   target_updated: { icon: <TrendingUp size={14} />, color: 'var(--accent)', label: 'Target Updated' },
-  target_deleted: { icon: <Target size={14} />, color: 'var(--danger)', label: 'Target Deleted' },
+  target_deleted: { icon: <TargetIcon size={14} />, color: 'var(--danger)', label: 'Target Deleted' },
   stage_changed: { icon: <TrendingUp size={14} />, color: 'var(--warning)', label: 'Stage Changed' },
   touchpoint_added: { icon: <Users size={14} />, color: 'var(--accent)', label: 'Touchpoint Logged' },
   meeting_note_added: { icon: <FileText size={14} />, color: 'var(--accent)', label: 'Meeting Note Added' },
@@ -29,15 +29,33 @@ const TYPE_CONFIG: Record<ActivityType, { icon: React.ReactNode; color: string; 
 
 export default function ActivityPage() {
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
+  const [allTargets, setAllTargets] = useState<Target[]>([]);
   const [filterType, setFilterType] = useState<string>('all');
+  const [filterTarget, setFilterTarget] = useState<string>('all');
+  const [filterDateRange, setFilterDateRange] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    setActivities(getActivities(200));
+    setActivities(getActivities(500));
+    setAllTargets(getTargets());
   }, []);
 
-  const filtered = filterType === 'all'
-    ? activities
-    : activities.filter(a => a.type === filterType);
+  const filtered = activities.filter(a => {
+    if (filterType !== 'all' && a.type !== filterType) return false;
+    if (filterTarget !== 'all' && a.target_id !== filterTarget) return false;
+    if (filterDateRange !== 'all') {
+      const now = Date.now();
+      const created = new Date(a.created_at).getTime();
+      if (filterDateRange === '7d' && now - created > 7 * 86400000) return false;
+      if (filterDateRange === '30d' && now - created > 30 * 86400000) return false;
+      if (filterDateRange === '90d' && now - created > 90 * 86400000) return false;
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return a.description.toLowerCase().includes(q) || a.target_name?.toLowerCase().includes(q);
+    }
+    return true;
+  });
 
   // Group by date
   const grouped: Record<string, ActivityEntry[]> = {};
@@ -48,6 +66,14 @@ export default function ActivityPage() {
   }
 
   const activeTypes = Array.from(new Set(activities.map(a => a.type)));
+  const targetsInActivity = Array.from(new Set(activities.filter(a => a.target_id).map(a => a.target_id!)));
+
+  // Activity type breakdown
+  const typeCounts = activeTypes.map(t => ({
+    type: t,
+    count: activities.filter(a => a.type === t).length,
+    config: TYPE_CONFIG[t],
+  })).sort((a, b) => b.count - a.count);
 
   return (
     <div className="p-6 space-y-6">
@@ -55,23 +81,69 @@ export default function ActivityPage() {
         <div>
           <h1 className="text-2xl font-bold">Activity Feed</h1>
           <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
-            {activities.length} total activities logged
+            {filtered.length} of {activities.length} activities shown
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Filter size={14} style={{ color: 'var(--muted)' }} />
-          <select
-            value={filterType}
-            onChange={e => setFilterType(e.target.value)}
-            className="text-sm"
-          >
-            <option value="all">All Activities</option>
-            {activeTypes.map(t => (
-              <option key={t} value={t}>{TYPE_CONFIG[t]?.label || t}</option>
-            ))}
-          </select>
-        </div>
       </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 max-w-xs">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted)' }} />
+          <input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search activities..."
+            className="w-full pl-9 text-sm"
+          />
+        </div>
+        <select value={filterType} onChange={e => setFilterType(e.target.value)} className="text-sm">
+          <option value="all">All Types</option>
+          {activeTypes.map(t => (
+            <option key={t} value={t}>{TYPE_CONFIG[t]?.label || t}</option>
+          ))}
+        </select>
+        <select value={filterTarget} onChange={e => setFilterTarget(e.target.value)} className="text-sm">
+          <option value="all">All Targets</option>
+          {targetsInActivity.map(tid => {
+            const t = allTargets.find(x => x.id === tid);
+            return <option key={tid} value={tid}>{t?.name || tid}</option>;
+          })}
+        </select>
+        <select value={filterDateRange} onChange={e => setFilterDateRange(e.target.value)} className="text-sm">
+          <option value="all">All Time</option>
+          <option value="7d">Last 7 Days</option>
+          <option value="30d">Last 30 Days</option>
+          <option value="90d">Last 90 Days</option>
+        </select>
+      </div>
+
+      {/* Activity Stats */}
+      {activities.length > 0 && (
+        <div className="glass-card p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-2" style={{ color: 'var(--muted-foreground)' }}>
+            <BarChart3 size={12} /> Activity Breakdown
+          </h3>
+          <div className="flex items-center gap-3 flex-wrap">
+            {typeCounts.slice(0, 8).map(tc => (
+              <button
+                key={tc.type}
+                onClick={() => setFilterType(filterType === tc.type ? 'all' : tc.type)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors"
+                style={{
+                  background: filterType === tc.type ? `${tc.config.color}20` : 'var(--background)',
+                  color: filterType === tc.type ? tc.config.color : 'var(--muted-foreground)',
+                  border: filterType === tc.type ? `1px solid ${tc.config.color}40` : '1px solid transparent',
+                }}
+              >
+                {tc.config.icon}
+                <span>{tc.config.label}</span>
+                <span className="font-mono font-bold">{tc.count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {activities.length === 0 ? (
         <div className="glass-card p-12 text-center" style={{ color: 'var(--muted)' }}>
@@ -79,12 +151,17 @@ export default function ActivityPage() {
           <p className="text-lg font-medium mb-1">No activity yet</p>
           <p className="text-sm">Activities will appear here as you use DealForge -- adding targets, logging touchpoints, completing DD tasks, etc.</p>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="glass-card p-8 text-center" style={{ color: 'var(--muted)' }}>
+          <Filter size={32} className="mx-auto mb-2 opacity-50" />
+          <p className="text-sm">No activities match your filters.</p>
+        </div>
       ) : (
         <div className="space-y-6">
           {Object.entries(grouped).map(([date, entries]) => (
             <div key={date}>
               <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--muted-foreground)' }}>
-                {date}
+                {date} <span className="font-normal ml-1" style={{ color: 'var(--muted)' }}>({entries.length})</span>
               </h3>
               <div className="space-y-1">
                 {entries.map(a => {
