@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronRight, ChevronLeft, CheckCircle2, HelpCircle, Star } from 'lucide-react';
+import { ChevronRight, ChevronLeft, CheckCircle2, Star, Edit2 } from 'lucide-react';
 import type { DealScore } from '@/lib/types';
 import { SCORE_CRITERIA } from '@/lib/types';
 
@@ -11,6 +11,14 @@ interface Props {
   onSave: (score: DealScore) => void;
   onClose: () => void;
 }
+
+const SCORE_LABELS: { label: string; color: string }[] = [
+  { label: 'Poor / High Risk', color: 'var(--danger, #ef4444)' },
+  { label: 'Below Average', color: 'var(--warning, #f59e0b)' },
+  { label: 'Average / Acceptable', color: 'var(--muted-foreground, #6b7280)' },
+  { label: 'Good / Above Average', color: 'var(--info, #3b82f6)' },
+  { label: 'Excellent / Best in Class', color: 'var(--success, #10b981)' },
+];
 
 interface ScoringQuestion {
   criterion: keyof DealScore;
@@ -23,8 +31,8 @@ const SCORING_QUESTIONS: ScoringQuestion[] = [
     criterion: 'diversified_customers',
     question: 'How diversified is the customer base?',
     guidance: [
-      { score: 1, description: 'Single customer >40% of revenue. Extreme concentration risk.' },
-      { score: 2, description: 'Top customer 20-40% of revenue, or top 3 customers >60%.' },
+      { score: 1, description: 'Top customer >50% revenue. Extreme concentration risk.' },
+      { score: 2, description: 'Top customer 20-50% of revenue, or top 3 customers >60%.' },
       { score: 3, description: 'Top customer 10-20% of revenue. Moderate concentration.' },
       { score: 4, description: 'No customer >10% of revenue. Good diversification.' },
       { score: 5, description: 'No customer >5% of revenue. Highly diversified across 100+ accounts.' },
@@ -87,38 +95,15 @@ const SCORING_QUESTIONS: ScoringQuestion[] = [
   },
 ];
 
+const TOTAL_STEPS = SCORING_QUESTIONS.length + 1; // +1 for the summary step
+
 export default function ScoringWizard({ currentScore, targetName, onSave, onClose }: Props) {
   const [step, setStep] = useState(0);
   const [scores, setScores] = useState<Partial<DealScore>>(() => currentScore || {});
-  const [showGuidance, setShowGuidance] = useState<number | null>(null);
 
-  const currentQuestion = SCORING_QUESTIONS[step];
-  const isLastStep = step === SCORING_QUESTIONS.length - 1;
+  const isSummaryStep = step === SCORING_QUESTIONS.length;
   const isComplete = SCORING_QUESTIONS.every(q => scores[q.criterion] !== undefined);
-  const currentValue = scores[currentQuestion.criterion];
 
-  const handleScore = (value: number) => {
-    setScores(prev => ({ ...prev, [currentQuestion.criterion]: value }));
-    setShowGuidance(null);
-  };
-
-  const handleNext = () => {
-    if (isLastStep) {
-      if (isComplete) {
-        onSave(scores as DealScore);
-      }
-    } else {
-      setStep(s => s + 1);
-      setShowGuidance(null);
-    }
-  };
-
-  const handleBack = () => {
-    setStep(s => Math.max(0, s - 1));
-    setShowGuidance(null);
-  };
-
-  const criterion = SCORE_CRITERIA.find(c => c.key === currentQuestion.criterion)!;
   const weightedTotal = SCORE_CRITERIA.reduce((sum, c) => {
     const val = scores[c.key];
     return sum + (val !== undefined ? val * c.weight : 0);
@@ -126,10 +111,30 @@ export default function ScoringWizard({ currentScore, targetName, onSave, onClos
   const maxWeighted = SCORE_CRITERIA.reduce((sum, c) => sum + 5 * c.weight, 0);
   const answeredCount = SCORING_QUESTIONS.filter(q => scores[q.criterion] !== undefined).length;
 
+  const handleScore = (value: number) => {
+    const currentQuestion = SCORING_QUESTIONS[step];
+    if (!currentQuestion) return;
+    setScores(prev => ({ ...prev, [currentQuestion.criterion]: value }));
+  };
+
+  const handleNext = () => {
+    if (isSummaryStep) {
+      if (isComplete) {
+        onSave(scores as DealScore);
+      }
+    } else {
+      setStep(s => s + 1);
+    }
+  };
+
+  const handleBack = () => {
+    setStep(s => Math.max(0, s - 1));
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
       <div
-        className="w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden"
+        className="glass-card w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden"
         style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
       >
         {/* Header */}
@@ -147,24 +152,30 @@ export default function ScoringWizard({ currentScore, targetName, onSave, onClos
           </div>
           {/* Progress bar */}
           <div className="flex items-center gap-1.5 mt-4">
-            {SCORING_QUESTIONS.map((q, i) => (
-              <div
-                key={q.criterion}
-                className="flex-1 h-1.5 rounded-full cursor-pointer transition-all"
-                onClick={() => { setStep(i); setShowGuidance(null); }}
-                style={{
-                  background: scores[q.criterion] !== undefined
-                    ? 'var(--accent)'
-                    : i === step
-                    ? 'var(--accent-muted)'
-                    : 'var(--background)',
-                }}
-              />
-            ))}
+            {Array.from({ length: TOTAL_STEPS }).map((_, i) => {
+              const isCriterionStep = i < SCORING_QUESTIONS.length;
+              const filled = isCriterionStep
+                ? scores[SCORING_QUESTIONS[i].criterion] !== undefined
+                : isComplete;
+              return (
+                <div
+                  key={i}
+                  className="flex-1 h-1.5 rounded-full cursor-pointer transition-all"
+                  onClick={() => setStep(i)}
+                  style={{
+                    background: filled
+                      ? 'var(--accent)'
+                      : i === step
+                      ? 'var(--accent-muted)'
+                      : 'var(--background)',
+                  }}
+                />
+              );
+            })}
           </div>
           <div className="flex items-center justify-between mt-2">
             <span className="text-xs" style={{ color: 'var(--muted)' }}>
-              Step {step + 1} of {SCORING_QUESTIONS.length}
+              Step {step + 1} of {TOTAL_STEPS}{isSummaryStep ? ' — Summary' : ''}
             </span>
             <span className="text-xs" style={{ color: 'var(--muted)' }}>
               {answeredCount}/{SCORING_QUESTIONS.length} answered
@@ -172,97 +183,181 @@ export default function ScoringWizard({ currentScore, targetName, onSave, onClos
           </div>
         </div>
 
-        {/* Question */}
-        <div className="p-6">
-          <div className="mb-1">
-            <span
-              className="text-xs px-2 py-0.5 rounded-full font-medium"
-              style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}
-            >
-              {criterion.label}
-            </span>
-            <span className="text-xs ml-2" style={{ color: 'var(--muted)' }}>
-              Weight: {criterion.weight}x
-            </span>
-          </div>
-          <h3 className="text-base font-semibold mt-3">{currentQuestion.question}</h3>
-          <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{criterion.description}</p>
+        {/* Body */}
+        <div className="p-6" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          {isSummaryStep ? (
+            /* Summary Step */
+            <div>
+              <h3 className="text-base font-semibold mb-4">Score Summary</h3>
+              <div className="space-y-2">
+                {SCORE_CRITERIA.map((c, idx) => {
+                  const val = scores[c.key];
+                  const labelInfo = val !== undefined ? SCORE_LABELS[val - 1] : null;
+                  return (
+                    <div
+                      key={c.key}
+                      className="glass-card flex items-center justify-between p-3 rounded-lg"
+                      style={{ background: 'var(--background)', border: '1px solid var(--border)' }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{c.label}</span>
+                          <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                            ({c.weight}x)
+                          </span>
+                        </div>
+                        <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>{c.description}</p>
+                      </div>
+                      <div className="flex items-center gap-3 ml-4 flex-shrink-0">
+                        {val !== undefined && labelInfo ? (
+                          <>
+                            <div className="text-right">
+                              <span className="text-lg font-bold font-mono" style={{ color: labelInfo.color }}>{val}</span>
+                              <span className="text-xs ml-1" style={{ color: labelInfo.color }}>{labelInfo.label}</span>
+                            </div>
+                            <button
+                              onClick={() => setStep(idx)}
+                              className="p-1 rounded transition-colors"
+                              style={{ color: 'var(--muted)' }}
+                              title="Edit this score"
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'var(--danger)', color: 'white' }}>
+                            Not scored
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
-          {/* Score buttons */}
-          <div className="flex items-center gap-3 mt-6">
-            {[1, 2, 3, 4, 5].map(n => (
-              <button
-                key={n}
-                onClick={() => handleScore(n)}
-                className="flex-1 flex flex-col items-center gap-1 p-3 rounded-xl transition-all"
-                style={{
-                  background: currentValue === n ? 'var(--accent-muted)' : 'var(--background)',
-                  border: `2px solid ${currentValue === n ? 'var(--accent)' : 'var(--border)'}`,
-                  color: currentValue === n ? 'var(--accent)' : 'var(--foreground)',
-                }}
+              {/* Weighted total */}
+              <div
+                className="glass-card mt-4 p-4 rounded-lg text-center"
+                style={{ background: 'var(--accent-muted)', border: '1px solid var(--accent)' }}
               >
-                <div className="flex items-center gap-0.5">
-                  {Array.from({ length: n }).map((_, i) => (
-                    <Star
-                      key={i}
-                      size={14}
-                      fill={currentValue === n ? 'var(--accent)' : 'none'}
-                      style={{ color: currentValue === n ? 'var(--accent)' : 'var(--muted)' }}
-                    />
-                  ))}
+                <div className="text-xs font-medium mb-1" style={{ color: 'var(--accent)' }}>Weighted Total Score</div>
+                <div className="text-3xl font-bold font-mono" style={{ color: 'var(--accent)' }}>
+                  {isComplete ? (weightedTotal / maxWeighted * 5).toFixed(2) : '--'}
                 </div>
-                <span className="text-lg font-bold">{n}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Guidance toggle */}
-          <button
-            onClick={() => setShowGuidance(showGuidance !== null ? null : 0)}
-            className="flex items-center gap-1.5 mt-4 text-xs transition-colors"
-            style={{ color: 'var(--accent)' }}
-          >
-            <HelpCircle size={14} />
-            {showGuidance !== null ? 'Hide scoring guide' : 'Show scoring guide'}
-          </button>
-
-          {showGuidance !== null && (
-            <div className="mt-3 space-y-2 p-4 rounded-xl" style={{ background: 'var(--background)' }}>
-              {currentQuestion.guidance.map(g => (
-                <div
-                  key={g.score}
-                  className="flex items-start gap-3 p-2 rounded-lg cursor-pointer transition-colors"
-                  onClick={() => handleScore(g.score)}
-                  style={{
-                    background: currentValue === g.score ? 'var(--accent-muted)' : 'transparent',
-                  }}
-                >
-                  <span
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                    style={{
-                      background: currentValue === g.score ? 'var(--accent)' : 'var(--card)',
-                      color: currentValue === g.score ? 'white' : 'var(--muted-foreground)',
-                      border: `1px solid ${currentValue === g.score ? 'var(--accent)' : 'var(--border)'}`,
-                    }}
-                  >
-                    {g.score}
-                  </span>
-                  <span className="text-xs leading-relaxed" style={{ color: currentValue === g.score ? 'var(--accent)' : 'var(--muted-foreground)' }}>
-                    {g.description}
-                  </span>
-                </div>
-              ))}
+                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>out of 5.00</div>
+                {isComplete && (
+                  <div className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+                    Raw weighted: {weightedTotal.toFixed(1)} / {maxWeighted.toFixed(1)}
+                  </div>
+                )}
+              </div>
             </div>
+          ) : (
+            /* Criterion Step */
+            (() => {
+              const currentQuestion = SCORING_QUESTIONS[step];
+              const criterion = SCORE_CRITERIA.find(c => c.key === currentQuestion.criterion)!;
+              const currentValue = scores[currentQuestion.criterion];
+              return (
+                <>
+                  <div className="mb-1">
+                    <span
+                      className="text-xs px-2 py-0.5 rounded-full font-medium"
+                      style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}
+                    >
+                      {criterion.label}
+                    </span>
+                    <span className="text-xs ml-2" style={{ color: 'var(--muted)' }}>
+                      Weight: {criterion.weight}x
+                    </span>
+                  </div>
+                  <h3 className="text-base font-semibold mt-3">{currentQuestion.question}</h3>
+                  <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{criterion.description}</p>
+
+                  {/* Score cards */}
+                  <div className="grid grid-cols-5 gap-2 mt-5">
+                    {[1, 2, 3, 4, 5].map(n => {
+                      const info = SCORE_LABELS[n - 1];
+                      const isSelected = currentValue === n;
+                      return (
+                        <button
+                          key={n}
+                          onClick={() => handleScore(n)}
+                          className="flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all"
+                          style={{
+                            background: isSelected ? 'var(--accent-muted)' : 'var(--background)',
+                            border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                            color: isSelected ? 'var(--accent)' : 'var(--foreground)',
+                          }}
+                        >
+                          <div className="flex items-center gap-0.5">
+                            {Array.from({ length: n }).map((_, i) => (
+                              <Star
+                                key={i}
+                                size={12}
+                                fill={isSelected ? 'var(--accent)' : 'none'}
+                                style={{ color: isSelected ? 'var(--accent)' : 'var(--muted)' }}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-lg font-bold">{n}</span>
+                          <span
+                            className="text-[10px] leading-tight text-center font-medium"
+                            style={{ color: isSelected ? 'var(--accent)' : info.color }}
+                          >
+                            {info.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Guidance - always visible */}
+                  <div className="mt-5 space-y-1.5 p-4 rounded-xl" style={{ background: 'var(--background)' }}>
+                    <div className="text-xs font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>
+                      Scoring Guide
+                    </div>
+                    {currentQuestion.guidance.map(g => {
+                      const gInfo = SCORE_LABELS[g.score - 1];
+                      return (
+                        <div
+                          key={g.score}
+                          className="flex items-start gap-3 p-2 rounded-lg cursor-pointer transition-colors"
+                          onClick={() => handleScore(g.score)}
+                          style={{
+                            background: currentValue === g.score ? 'var(--accent-muted)' : 'transparent',
+                          }}
+                        >
+                          <span
+                            className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                            style={{
+                              background: currentValue === g.score ? 'var(--accent)' : 'var(--card)',
+                              color: currentValue === g.score ? 'white' : gInfo.color,
+                              border: `1px solid ${currentValue === g.score ? 'var(--accent)' : 'var(--border)'}`,
+                            }}
+                          >
+                            {g.score}
+                          </span>
+                          <span className="text-xs leading-relaxed" style={{ color: currentValue === g.score ? 'var(--accent)' : 'var(--muted-foreground)' }}>
+                            {g.description}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()
           )}
         </div>
 
         {/* Footer */}
         <div className="p-5 border-t flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-2">
-            {isComplete && (
+            {isComplete && !isSummaryStep && (
               <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--success)' }}>
                 <CheckCircle2 size={14} />
-                Weighted Score: {(weightedTotal / maxWeighted * 5).toFixed(2)} / 5.00
+                Score: {(weightedTotal / maxWeighted * 5).toFixed(2)} / 5.00
               </div>
             )}
           </div>
@@ -275,7 +370,7 @@ export default function ScoringWizard({ currentScore, targetName, onSave, onClos
             >
               <ChevronLeft size={16} /> Back
             </button>
-            {isLastStep ? (
+            {isSummaryStep ? (
               <button
                 onClick={handleNext}
                 disabled={!isComplete}
@@ -290,7 +385,7 @@ export default function ScoringWizard({ currentScore, targetName, onSave, onClos
                 className="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                 style={{ background: 'var(--accent)', color: 'white' }}
               >
-                Next <ChevronRight size={16} />
+                {step === SCORING_QUESTIONS.length - 1 ? 'Review' : 'Next'} <ChevronRight size={16} />
               </button>
             )}
           </div>

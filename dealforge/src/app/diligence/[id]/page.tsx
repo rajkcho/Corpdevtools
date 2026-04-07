@@ -175,6 +175,20 @@ export default function DDProjectDetailPage() {
           >
             <CheckCircle2 size={14} /> Data Room Checklist
           </button>
+          <button
+            onClick={async () => {
+              const { generateDDExecutiveSummary } = await import('@/lib/dd-executive-summary');
+              const { getTarget, getDDTasksByProject } = await import('@/lib/db');
+              const t = getTarget(project.target_id);
+              const allTasks = getDDTasksByProject(id);
+              const html = generateDDExecutiveSummary(project, workstreams, allTasks, risks, findings, t);
+              const win = window.open('', '_blank');
+              if (win) { win.document.write(html); win.document.close(); }
+            }}
+            className="btn btn-primary btn-sm"
+          >
+            <FileText size={14} /> DD Summary
+          </button>
         </div>
       </div>
 

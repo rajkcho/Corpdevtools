@@ -7,6 +7,7 @@ import {
   MessageSquare, Calendar, Upload, FileText, Link2,
   Users, ExternalLink, MapPin, Building2, ChevronDown, ChevronUp,
   Download, Import, Printer, FileOutput, Flag, CheckCircle2, Star,
+  Search, Pin, X, ChevronRight,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -514,6 +515,9 @@ export default function TargetDetailPage() {
             title="Export full target profile"
           >
             <Printer size={14} /> Profile
+          </button>
+          <button onClick={() => setShowScoringWizard(true)} className="btn btn-primary btn-sm">
+            <Star size={14} /> {target.score ? 'Re-Score' : 'Score'}
           </button>
           <button onClick={() => setShowEditModal(true)} className="btn btn-secondary btn-sm">
             <Edit2 size={14} /> Edit
@@ -1677,7 +1681,35 @@ function MeetingNoteUpload({ targetId, targetName, initialText, onDone, onCancel
 function JournalPanel({ targetId, entries, onReload }: { targetId: string; entries: JournalEntry[]; onReload: () => void }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [form, setForm] = useState({ title: '', content: '', tags: '' });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+
+  const TAG_COLORS = ['var(--accent)', 'var(--success)', 'var(--warning)', '#8b5cf6', '#ec4899', '#f97316'];
+
+  // Collect all unique tags across entries for the tag filter bar
+  const allTags = Array.from(new Set(entries.flatMap(e => e.tags)));
+
+  // Derive a stable color for a tag based on its position in allTags
+  const tagColor = (tag: string) => {
+    const idx = allTags.indexOf(tag);
+    return TAG_COLORS[(idx >= 0 ? idx : 0) % TAG_COLORS.length];
+  };
+
+  // Filter entries by search query and active tag filter
+  const filteredEntries = entries.filter(entry => {
+    if (activeTagFilter && !entry.tags.includes(activeTagFilter)) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return (
+        entry.title.toLowerCase().includes(q) ||
+        entry.content.toLowerCase().includes(q) ||
+        entry.tags.some(t => t.toLowerCase().includes(q))
+      );
+    }
+    return true;
+  });
 
   const handleAdd = () => {
     createJournalEntry({
@@ -1685,6 +1717,7 @@ function JournalPanel({ targetId, entries, onReload }: { targetId: string; entri
       title: form.title,
       content: form.content,
       tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
+      pinned: false,
     });
     setForm({ title: '', content: '', tags: '' });
     setShowAdd(false);
@@ -1704,43 +1737,146 @@ function JournalPanel({ targetId, entries, onReload }: { targetId: string; entri
 
   const startEdit = (entry: JournalEntry) => {
     setEditingId(entry.id);
+    setExpandedId(null);
     setForm({ title: entry.title, content: entry.content, tags: entry.tags.join(', ') });
   };
 
-  const TAG_COLORS = ['var(--accent)', 'var(--success)', 'var(--warning)', '#8b5cf6', '#ec4899', '#f97316'];
+  const togglePin = (entry: JournalEntry) => {
+    updateJournalEntry(entry.id, { pinned: !entry.pinned });
+    onReload();
+  };
+
+  const CONTENT_PREVIEW_LEN = 180;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold">Deal Journal</h2>
-        <button onClick={() => { setShowAdd(true); setEditingId(null); setForm({ title: '', content: '', tags: '' }); }} className="btn btn-primary btn-sm">
-          <Plus size={14} /> New Entry
-        </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <h2 style={{ fontWeight: 600, margin: 0 }}>Deal Journal</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, justifyContent: 'flex-end' }}>
+          {/* Search input */}
+          <div style={{ position: 'relative', maxWidth: '260px', flex: 1 }}>
+            <Search size={14} style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} />
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search journal..."
+              style={{
+                width: '100%',
+                fontSize: '0.8rem',
+                padding: '0.4rem 0.5rem 0.4rem 1.75rem',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                background: 'var(--background)',
+                color: 'var(--foreground)',
+              }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                style={{ position: 'absolute', right: '0.4rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0, display: 'flex' }}
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => { setShowAdd(true); setEditingId(null); setForm({ title: '', content: '', tags: '' }); }}
+            className="btn btn-primary btn-sm"
+          >
+            <Plus size={14} /> New Entry
+          </button>
+        </div>
       </div>
 
+      {/* Tag filter bar */}
+      {allTags.length > 0 && (
+        <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.7rem', color: 'var(--muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter:</span>
+          {allTags.map(tag => {
+            const c = tagColor(tag);
+            const isActive = activeTagFilter === tag;
+            return (
+              <button
+                key={tag}
+                onClick={() => setActiveTagFilter(isActive ? null : tag)}
+                style={{
+                  fontSize: '0.7rem',
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: '9999px',
+                  border: `1px solid ${c}`,
+                  background: isActive ? c : `${c}15`,
+                  color: isActive ? '#fff' : c,
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {tag}
+              </button>
+            );
+          })}
+          {activeTagFilter && (
+            <button
+              onClick={() => setActiveTagFilter(null)}
+              style={{ fontSize: '0.7rem', color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* New / Edit form */}
       {(showAdd || editingId) && (
-        <div className="glass-card p-4 space-y-3">
+        <div className="glass-card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <input
             value={form.title}
             onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
             placeholder="Entry title..."
-            className="w-full text-sm font-medium"
+            style={{
+              width: '100%',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              padding: '0.4rem 0.5rem',
+              border: '1px solid var(--border)',
+              borderRadius: '6px',
+              background: 'var(--background)',
+              color: 'var(--foreground)',
+            }}
           />
           <textarea
             value={form.content}
             onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
             placeholder="Write your thoughts, analysis, observations..."
-            className="w-full text-sm"
             rows={8}
-            style={{ lineHeight: 1.6 }}
+            style={{
+              width: '100%',
+              fontSize: '0.875rem',
+              lineHeight: 1.6,
+              padding: '0.5rem',
+              border: '1px solid var(--border)',
+              borderRadius: '6px',
+              background: 'var(--background)',
+              color: 'var(--foreground)',
+              resize: 'vertical',
+            }}
           />
           <input
             value={form.tags}
             onChange={e => setForm(f => ({ ...f, tags: e.target.value }))}
             placeholder="Tags (comma-separated): valuation, risk, culture..."
-            className="w-full text-sm"
+            style={{
+              width: '100%',
+              fontSize: '0.875rem',
+              padding: '0.4rem 0.5rem',
+              border: '1px solid var(--border)',
+              borderRadius: '6px',
+              background: 'var(--background)',
+              color: 'var(--foreground)',
+            }}
           />
-          <div className="flex justify-end gap-2">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
             <button onClick={() => { setShowAdd(false); setEditingId(null); }} className="btn btn-secondary btn-sm">Cancel</button>
             {editingId ? (
               <button onClick={() => handleUpdate(editingId)} disabled={!form.title} className="btn btn-primary btn-sm">Save</button>
@@ -1751,58 +1887,125 @@ function JournalPanel({ targetId, entries, onReload }: { targetId: string; entri
         </div>
       )}
 
+      {/* Empty state */}
       {entries.length === 0 && !showAdd && (
-        <div className="glass-card p-8 text-center" style={{ color: 'var(--muted)' }}>
-          <FileText size={32} className="mx-auto mb-2 opacity-50" />
-          <p className="text-sm">No journal entries yet.</p>
-          <p className="text-xs mt-1">Use the journal to track your thinking, analysis notes, and observations about this deal.</p>
+        <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)' }}>
+          <FileText size={32} style={{ margin: '0 auto 0.5rem', opacity: 0.5 }} />
+          <p style={{ fontSize: '0.875rem' }}>No journal entries yet.</p>
+          <p style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Use the journal to track your thinking, analysis notes, and observations about this deal.</p>
         </div>
       )}
 
-      {entries.map(entry => (
-        <div key={entry.id} className="glass-card p-4">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                {entry.pinned && <span style={{ color: 'var(--warning)', fontSize: '0.7rem' }}>PINNED</span>}
-                <h3 className="font-medium text-sm">{entry.title}</h3>
-              </div>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-                {new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                {entry.updated_at !== entry.created_at && ' (edited)'}
-              </p>
-            </div>
-            <div className="flex gap-1">
-              <button
-                onClick={() => { updateJournalEntry(entry.id, { pinned: !entry.pinned }); onReload(); }}
-                className="btn btn-ghost btn-sm"
-                title={entry.pinned ? 'Unpin' : 'Pin'}
-                style={{ color: entry.pinned ? 'var(--warning)' : 'var(--muted)' }}
-              >
-                ★
-              </button>
-              <button onClick={() => startEdit(entry)} className="btn btn-ghost btn-sm">
-                <Edit2 size={12} />
-              </button>
-              <button onClick={() => { deleteJournalEntry(entry.id); onReload(); }} className="btn btn-ghost btn-sm">
-                <Trash2 size={12} style={{ color: 'var(--danger)' }} />
-              </button>
-            </div>
-          </div>
-          <div className="mt-2 text-sm whitespace-pre-wrap" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-            {entry.content}
-          </div>
-          {entry.tags.length > 0 && (
-            <div className="flex gap-1 mt-3">
-              {entry.tags.map((tag, i) => (
-                <span key={tag} className="badge" style={{ background: `${TAG_COLORS[i % TAG_COLORS.length]}15`, color: TAG_COLORS[i % TAG_COLORS.length] }}>
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
+      {/* No results from filtering */}
+      {entries.length > 0 && filteredEntries.length === 0 && !showAdd && (
+        <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--muted)' }}>
+          <Search size={24} style={{ margin: '0 auto 0.5rem', opacity: 0.5 }} />
+          <p style={{ fontSize: '0.875rem' }}>No entries match your {searchQuery ? 'search' : 'filter'}.</p>
         </div>
-      ))}
+      )}
+
+      {/* Entries list */}
+      {filteredEntries.map(entry => {
+        const isExpanded = expandedId === entry.id;
+        const isLong = entry.content.length > CONTENT_PREVIEW_LEN;
+        const displayContent = isExpanded || !isLong ? entry.content : entry.content.slice(0, CONTENT_PREVIEW_LEN) + '...';
+
+        return (
+          <div
+            key={entry.id}
+            className="glass-card"
+            style={{
+              padding: '1rem',
+              borderLeft: entry.pinned ? '3px solid var(--warning)' : '3px solid transparent',
+              cursor: isLong && editingId !== entry.id ? 'pointer' : 'default',
+            }}
+            onClick={() => {
+              if (isLong && editingId !== entry.id) {
+                setExpandedId(isExpanded ? null : entry.id);
+              }
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {entry.pinned && (
+                    <Pin size={12} style={{ color: 'var(--warning)', flexShrink: 0 }} />
+                  )}
+                  <h3 style={{ fontWeight: 500, fontSize: '0.875rem', margin: 0 }}>{entry.title}</h3>
+                  {isLong && (
+                    <ChevronRight
+                      size={14}
+                      style={{
+                        color: 'var(--muted)',
+                        flexShrink: 0,
+                        transition: 'transform 0.2s ease',
+                        transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                      }}
+                    />
+                  )}
+                </div>
+                <p style={{ fontSize: '0.7rem', marginTop: '0.125rem', color: 'var(--muted)' }}>
+                  {new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  {entry.updated_at !== entry.created_at && ' (edited)'}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                <button
+                  onClick={() => togglePin(entry)}
+                  className="btn btn-ghost btn-sm"
+                  title={entry.pinned ? 'Unpin' : 'Pin'}
+                  style={{ color: entry.pinned ? 'var(--warning)' : 'var(--muted)' }}
+                >
+                  <Pin size={13} />
+                </button>
+                <button onClick={() => startEdit(entry)} className="btn btn-ghost btn-sm">
+                  <Edit2 size={12} />
+                </button>
+                <button onClick={() => { deleteJournalEntry(entry.id); onReload(); }} className="btn btn-ghost btn-sm">
+                  <Trash2 size={12} style={{ color: 'var(--danger)' }} />
+                </button>
+              </div>
+            </div>
+            <div
+              style={{
+                marginTop: '0.5rem',
+                fontSize: '0.875rem',
+                whiteSpace: 'pre-wrap',
+                color: 'var(--muted-foreground)',
+                lineHeight: 1.6,
+              }}
+            >
+              {displayContent}
+            </div>
+            {entry.tags.length > 0 && (
+              <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.75rem', flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+                {entry.tags.map(tag => {
+                  const c = tagColor(tag);
+                  const isFiltered = activeTagFilter === tag;
+                  return (
+                    <button
+                      key={tag}
+                      onClick={() => setActiveTagFilter(isFiltered ? null : tag)}
+                      className="badge"
+                      style={{
+                        background: isFiltered ? c : `${c}15`,
+                        color: isFiltered ? '#fff' : c,
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '0.7rem',
+                        padding: '0.1rem 0.4rem',
+                        borderRadius: '9999px',
+                      }}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

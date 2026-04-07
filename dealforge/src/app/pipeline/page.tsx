@@ -8,6 +8,7 @@ import { DEAL_STAGES } from '@/lib/types';
 import type { Target, DealStage } from '@/lib/types';
 import Modal from '@/components/Modal';
 import TargetForm from '@/components/TargetForm';
+import StageGateModal from '@/components/StageGateModal';
 
 export default function PipelinePage() {
   const [targets, setTargets] = useState<Target[]>([]);
@@ -20,6 +21,7 @@ export default function PipelinePage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStage, setBulkStage] = useState<string>('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetId: string } | null>(null);
+  const [stageGate, setStageGate] = useState<{ target: Target; newStage: DealStage } | null>(null);
 
   const reload = useCallback(() => setTargets(getTargets()), []);
 
@@ -95,13 +97,20 @@ export default function PipelinePage() {
     return idx > 0 ? stages[idx - 1] : null;
   };
 
+  const openStageGate = (targetId: string, newStage: DealStage) => {
+    const target = targets.find(t => t.id === targetId);
+    if (target && target.stage !== newStage) {
+      setStageGate({ target, newStage });
+    }
+  };
+
   const advanceStage = (targetId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const target = targets.find(t => t.id === targetId);
     if (!target) return;
     const next = getNextStage(target.stage);
-    if (next) { updateTarget(targetId, { stage: next }); reload(); }
+    if (next) openStageGate(targetId, next);
   };
 
   const regressStage = (targetId: string, e: React.MouseEvent) => {
@@ -110,23 +119,21 @@ export default function PipelinePage() {
     const target = targets.find(t => t.id === targetId);
     if (!target) return;
     const prev = getPrevStage(target.stage);
-    if (prev) { updateTarget(targetId, { stage: prev }); reload(); }
+    if (prev) openStageGate(targetId, prev);
   };
 
   const markLost = (targetId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    updateTarget(targetId, { stage: 'closed_lost' });
-    reload();
     setContextMenu(null);
+    openStageGate(targetId, 'closed_lost');
   };
 
   const markWon = (targetId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    updateTarget(targetId, { stage: 'closed_won' });
-    reload();
     setContextMenu(null);
+    openStageGate(targetId, 'closed_won');
   };
 
   const handleContextMenu = (e: React.MouseEvent, targetId: string) => {
@@ -912,6 +919,17 @@ export default function PipelinePage() {
           </>
         );
       })()}
+
+      {/* Stage Gate Modal */}
+      {stageGate && (
+        <StageGateModal
+          open={!!stageGate}
+          onClose={() => setStageGate(null)}
+          target={stageGate.target}
+          newStage={stageGate.newStage}
+          onComplete={reload}
+        />
+      )}
     </div>
   );
 }
