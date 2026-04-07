@@ -774,6 +774,153 @@ export default function AnalyticsPage() {
           </div>
         </div>
       </div>
+      {/* Stage × Vertical Heatmap */}
+      {targets.length > 0 && (
+        <div className="glass-card p-5">
+          <h2 className="font-semibold mb-1 flex items-center gap-2">
+            <BarChart3 size={16} style={{ color: 'var(--accent)' }} /> Stage × Vertical Heatmap
+          </h2>
+          <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>Number of targets at each stage by vertical</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr>
+                  <th className="text-left p-1.5 sticky left-0 z-10" style={{ background: 'var(--card)', color: 'var(--muted-foreground)', minWidth: 100 }}>Vertical</th>
+                  {DEAL_STAGES.filter(s => targets.some(t => t.stage === s.key)).map(s => (
+                    <th key={s.key} className="text-center p-1.5" style={{ color: s.color, minWidth: 50 }}>
+                      {s.label.split(' ')[0]}
+                    </th>
+                  ))}
+                  <th className="text-center p-1.5 font-bold" style={{ color: 'var(--foreground)', minWidth: 40 }}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {verticalData.map(v => {
+                  const activeStages = DEAL_STAGES.filter(s => targets.some(t => t.stage === s.key));
+                  return (
+                    <tr key={v.name} style={{ borderTop: '1px solid var(--border)' }}>
+                      <td className="p-1.5 font-medium sticky left-0 z-10" style={{ background: 'var(--card)' }}>{v.name}</td>
+                      {activeStages.map(s => {
+                        const count = targets.filter(t => t.vertical === v.name && t.stage === s.key).length;
+                        const maxCell = Math.max(...verticalData.flatMap(vd =>
+                          activeStages.map(st => targets.filter(t => t.vertical === vd.name && t.stage === st.key).length)
+                        ), 1);
+                        return (
+                          <td key={s.key} className="text-center p-1.5">
+                            {count > 0 ? (
+                              <span className="inline-flex items-center justify-center w-7 h-7 rounded text-xs font-bold"
+                                style={{
+                                  background: `${s.color}${Math.round(Math.max(0.15, (count / maxCell) * 0.7) * 255).toString(16).padStart(2, '0')}`,
+                                  color: count / maxCell > 0.4 ? 'white' : s.color,
+                                }}
+                              >
+                                {count}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--border)' }}>·</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="text-center p-1.5 font-bold font-mono">{v.count}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Conversion Rate Analysis */}
+      {targets.length >= 3 && (() => {
+        const stageOrder = DEAL_STAGES.map(s => s.key);
+        const conversionData = DEAL_STAGES.slice(0, -2).map((s, i) => {
+          const nextStage = DEAL_STAGES[i + 1];
+          const inThisStage = targets.filter(t => stageOrder.indexOf(t.stage) >= i).length;
+          const inNextStage = targets.filter(t => stageOrder.indexOf(t.stage) >= i + 1).length;
+          const convRate = inThisStage > 0 ? Math.round((inNextStage / inThisStage) * 100) : 0;
+
+          // Avg days in this stage for targets that progressed past it
+          const progressed = targets.filter(t => {
+            const history = typeof window !== 'undefined'
+              ? JSON.parse(localStorage.getItem(`dealforge_stage_history`) || '[]')
+              : [];
+            return stageOrder.indexOf(t.stage) > i;
+          });
+
+          return { from: s, to: nextStage, convRate, inStage: inThisStage, progressed: inNextStage };
+        }).filter(d => d.inStage > 0);
+
+        if (conversionData.length === 0) return null;
+
+        return (
+          <div className="glass-card p-5">
+            <h2 className="font-semibold mb-1 flex items-center gap-2">
+              <ArrowRight size={16} style={{ color: 'var(--accent)' }} /> Stage Conversion Rates
+            </h2>
+            <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>Percentage of targets progressing to each subsequent stage</p>
+            <div className="space-y-3">
+              {conversionData.map(d => (
+                <div key={d.from.key} className="flex items-center gap-3">
+                  <span className="text-xs w-24 truncate" style={{ color: d.from.color }}>{d.from.label}</span>
+                  <ArrowRight size={12} style={{ color: 'var(--muted)' }} />
+                  <span className="text-xs w-24 truncate" style={{ color: d.to.color }}>{d.to.label}</span>
+                  <div className="flex-1 h-4 rounded-full overflow-hidden" style={{ background: 'var(--background)' }}>
+                    <div className="h-full rounded-full transition-all duration-500 flex items-center justify-end px-2"
+                      style={{
+                        width: `${Math.max(8, d.convRate)}%`,
+                        background: d.convRate >= 60 ? 'var(--success)' : d.convRate >= 30 ? 'var(--warning)' : 'var(--danger)',
+                      }}
+                    >
+                      <span className="text-[10px] font-bold text-white">{d.convRate}%</span>
+                    </div>
+                  </div>
+                  <span className="text-xs font-mono w-16 text-right" style={{ color: 'var(--muted)' }}>
+                    {d.progressed}/{d.inStage}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Score Distribution */}
+      {targets.filter(t => t.weighted_score).length >= 3 && (
+        <div className="glass-card p-5">
+          <h2 className="font-semibold mb-1 flex items-center gap-2">
+            <TrendingUp size={16} style={{ color: 'var(--accent)' }} /> Score Distribution
+          </h2>
+          <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>Distribution of weighted scores across all scored targets</p>
+          <div className="flex items-end gap-1 h-32">
+            {[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map(bucket => {
+              const count = targets.filter(t => {
+                const s = t.weighted_score || 0;
+                return s >= bucket - 0.25 && s < bucket + 0.25;
+              }).length;
+              const maxCount = Math.max(...[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map(b =>
+                targets.filter(t => (t.weighted_score || 0) >= b - 0.25 && (t.weighted_score || 0) < b + 0.25).length
+              ), 1);
+              const color = bucket >= 4 ? 'var(--success)' : bucket >= 3 ? 'var(--warning)' : 'var(--danger)';
+              return (
+                <div key={bucket} className="flex-1 flex flex-col items-center">
+                  <div className="w-full rounded-t transition-all duration-300" style={{
+                    height: `${count > 0 ? Math.max(8, (count / maxCount) * 100) : 0}%`,
+                    background: count > 0 ? color : 'transparent',
+                  }} />
+                  <span className="text-[9px] mt-1 font-mono" style={{ color: 'var(--muted)' }}>{bucket}</span>
+                  {count > 0 && <span className="text-[9px] font-bold" style={{ color }}>{count}</span>}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex items-center justify-between mt-2 text-[10px]" style={{ color: 'var(--muted)' }}>
+            <span>← Lower scores</span>
+            <span>Higher scores →</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
