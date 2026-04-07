@@ -118,44 +118,82 @@ export default function TargetsPage() {
         </button>
       </div>
 
+      {/* Summary bar */}
+      {filtered.length > 0 && (
+        <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--muted)' }}>
+          <span>{filtered.length} shown</span>
+          <span>Pipeline: ${filtered.reduce((s, t) => s + (t.asking_price || 0), 0) > 0 ? `${(filtered.reduce((s, t) => s + (t.asking_price || 0), 0) / 1000000).toFixed(1)}M` : '—'}</span>
+          <span>Avg Score: {filtered.filter(t => t.weighted_score).length > 0 ? (filtered.reduce((s, t) => s + (t.weighted_score || 0), 0) / filtered.filter(t => t.weighted_score).length).toFixed(1) : '—'}</span>
+          <span>Scored: {filtered.filter(t => t.weighted_score).length}/{filtered.length}</span>
+        </div>
+      )}
+
       {/* Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filtered.map(t => (
-          <Link key={t.id} href={`/targets/${t.id}`} className="glass-card p-4 hover:border-opacity-80 transition-all">
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="font-semibold">{t.name}</div>
-                <div className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
-                  {t.vertical}{t.geography && ` · ${t.geography}`}
+        {filtered.map(t => {
+          const daysInStage = Math.floor((Date.now() - new Date(t.stage_entered_at).getTime()) / 86400000);
+          const staleWarning = daysInStage > 30 && !['closed_won', 'closed_lost'].includes(t.stage);
+          return (
+            <Link key={t.id} href={`/targets/${t.id}`} className="glass-card p-4 hover:border-opacity-80 transition-all">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="font-semibold">{t.name}</div>
+                  <div className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
+                    {t.vertical}{t.geography && ` · ${t.geography}`}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {staleWarning && (
+                    <span className="w-2 h-2 rounded-full" style={{ background: 'var(--warning)' }} title={`${daysInStage}d in stage`} />
+                  )}
+                  {t.weighted_score ? (
+                    <span className="badge font-mono" style={{
+                      background: t.weighted_score >= 4 ? 'rgba(16,185,129,0.15)' : t.weighted_score >= 3 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
+                      color: t.weighted_score >= 4 ? 'var(--success)' : t.weighted_score >= 3 ? 'var(--warning)' : 'var(--danger)',
+                    }}>
+                      {t.weighted_score.toFixed(1)}
+                    </span>
+                  ) : (
+                    <span className="badge" style={{ background: 'var(--background)', color: 'var(--muted)', fontSize: '0.6rem' }}>Unscored</span>
+                  )}
                 </div>
               </div>
-              {t.weighted_score && (
-                <span className="badge font-mono" style={{
-                  background: t.weighted_score >= 4 ? 'rgba(16,185,129,0.15)' : t.weighted_score >= 3 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
-                  color: t.weighted_score >= 4 ? 'var(--success)' : t.weighted_score >= 3 ? 'var(--warning)' : 'var(--danger)',
+              <div className="flex items-center gap-2 mt-3">
+                <span className="badge" style={{
+                  background: `${DEAL_STAGES.find(s => s.key === t.stage)?.color}20`,
+                  color: DEAL_STAGES.find(s => s.key === t.stage)?.color,
                 }}>
-                  {t.weighted_score.toFixed(1)}
+                  {DEAL_STAGES.find(s => s.key === t.stage)?.label}
                 </span>
+                <span className="badge capitalize" style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>
+                  {t.source}
+                </span>
+                <span className="text-[10px] ml-auto font-mono" style={{ color: staleWarning ? 'var(--warning)' : 'var(--muted)' }}>
+                  {daysInStage}d
+                </span>
+              </div>
+              <div className="flex items-center gap-4 mt-3 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                {t.revenue ? <span>Rev: ${(t.revenue / 1000000).toFixed(1)}M</span> : null}
+                {t.arr ? <span>ARR: ${(t.arr / 1000000).toFixed(1)}M</span> : null}
+                {t.recurring_revenue_pct ? <span>{t.recurring_revenue_pct}% recurring</span> : null}
+                {t.asking_price ? <span style={{ color: 'var(--success)' }}>Ask: ${(t.asking_price / 1000000).toFixed(1)}M</span> : null}
+                {t.customer_count ? <span>{t.customer_count} customers</span> : null}
+              </div>
+              {/* Mini score bar */}
+              {t.weighted_score && (
+                <div className="mt-2 h-1 rounded-full overflow-hidden" style={{ background: 'var(--background)' }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${(t.weighted_score / 5) * 100}%`,
+                      background: t.weighted_score >= 4 ? 'var(--success)' : t.weighted_score >= 3 ? 'var(--warning)' : 'var(--danger)',
+                    }}
+                  />
+                </div>
               )}
-            </div>
-            <div className="flex items-center gap-2 mt-3">
-              <span className="badge" style={{
-                background: `${DEAL_STAGES.find(s => s.key === t.stage)?.color}20`,
-                color: DEAL_STAGES.find(s => s.key === t.stage)?.color,
-              }}>
-                {DEAL_STAGES.find(s => s.key === t.stage)?.label}
-              </span>
-              <span className="badge capitalize" style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>
-                {t.source}
-              </span>
-            </div>
-            <div className="flex items-center gap-4 mt-3 text-xs" style={{ color: 'var(--muted-foreground)' }}>
-              {t.revenue && <span>Rev: ${(t.revenue / 1000000).toFixed(1)}M</span>}
-              {t.arr && <span>ARR: ${(t.arr / 1000000).toFixed(1)}M</span>}
-              {t.customer_count && <span>{t.customer_count} customers</span>}
-            </div>
-          </Link>
-        ))}
+            </Link>
+          );
+        })}
       </div>
 
       {filtered.length === 0 && (

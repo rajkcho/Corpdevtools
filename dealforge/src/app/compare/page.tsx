@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { getTargets } from '@/lib/db';
 import { SCORE_CRITERIA, DEAL_STAGES } from '@/lib/types';
 import type { Target } from '@/lib/types';
-import { X, Plus, ArrowUpDown, ChevronDown } from 'lucide-react';
+import { X, Plus, ArrowUpDown, ChevronDown, Download } from 'lucide-react';
 
 const COMPARE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
@@ -89,13 +89,35 @@ export default function ComparePage() {
     return undefined;
   };
 
+  const handleExportComparison = () => {
+    if (selectedTargets.length === 0) return;
+    const allRows = [...METRICS, ...SCORE_ROWS];
+    const headers = ['Metric', ...selectedTargets.map(t => t.name)];
+    const rows = allRows.map(row => [row.label, ...selectedTargets.map(t => row.render(t))]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `comparison-${selectedTargets.map(t => t.name.replace(/\s+/g, '-')).join('-vs-')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Compare Targets</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
-          Side-by-side comparison of up to 5 acquisition targets
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Compare Targets</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+            Side-by-side comparison of up to 5 acquisition targets
+          </p>
+        </div>
+        {selectedTargets.length >= 2 && (
+          <button onClick={handleExportComparison} className="btn btn-secondary btn-sm">
+            <Download size={14} /> Export CSV
+          </button>
+        )}
       </div>
 
       {selectedTargets.length === 0 ? (

@@ -168,11 +168,31 @@ export default function PipelinePage() {
         </div>
       )}
 
+      {/* Pipeline summary */}
+      <div className="flex items-center gap-4 text-xs overflow-x-auto" style={{ color: 'var(--muted)' }}>
+        {DEAL_STAGES.map(stage => {
+          const count = filteredTargets.filter(t => t.stage === stage.key).length;
+          const value = filteredTargets.filter(t => t.stage === stage.key).reduce((s, t) => s + (t.asking_price || 0), 0);
+          if (count === 0) return null;
+          return (
+            <div key={stage.key} className="flex items-center gap-1.5 flex-shrink-0">
+              <div className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
+              <span className="font-medium" style={{ color: stage.color }}>{count}</span>
+              {value > 0 && <span className="font-mono">${(value / 1000000).toFixed(1)}M</span>}
+            </div>
+          );
+        })}
+        <span className="ml-auto font-mono">
+          Total: ${(filteredTargets.reduce((s, t) => s + (t.asking_price || 0), 0) / 1000000).toFixed(1)}M
+        </span>
+      </div>
+
       {/* Kanban View */}
       {view === 'kanban' ? (
         <div className="kanban-scroll flex gap-3 flex-1 pb-4 min-h-0">
           {DEAL_STAGES.map(stage => {
             const stageTargets = filteredTargets.filter(t => t.stage === stage.key);
+            const stageValue = stageTargets.reduce((s, t) => s + (t.asking_price || 0), 0);
             return (
               <div
                 key={stage.key}
@@ -188,6 +208,11 @@ export default function PipelinePage() {
                   <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ background: 'var(--background)', color: 'var(--muted-foreground)' }}>
                     {stageTargets.length}
                   </span>
+                  {stageValue > 0 && (
+                    <span className="text-[10px] font-mono" style={{ color: 'var(--muted)' }}>
+                      ${(stageValue / 1000000).toFixed(1)}M
+                    </span>
+                  )}
                 </div>
 
                 {/* Cards */}
