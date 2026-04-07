@@ -171,6 +171,16 @@ ${allRows.map(row => `<tr><td>${row.label}</td>${selectedTargets.map(t => `<td c
         </div>
       ) : (
         <>
+          {/* Radar Chart Overlay - above comparison table */}
+          {selectedTargets.length >= 2 && selectedTargets.some(t => t.score) && (
+            <CompareRadar targets={selectedTargets} />
+          )}
+
+          {/* Quick Summary */}
+          {selectedTargets.length >= 2 && selectedTargets.some(t => t.weighted_score) && (
+            <QuickSummary targets={selectedTargets} />
+          )}
+
           {/* Sticky header with target names */}
           <div className="glass-card overflow-hidden">
             <div className="overflow-x-auto">
@@ -266,127 +276,6 @@ ${allRows.map(row => `<tr><td>${row.label}</td>${selectedTargets.map(t => `<td c
             </div>
           </div>
 
-          {/* Radar Chart Overlay */}
-          {selectedTargets.some(t => t.score) && (
-            <div className="glass-card p-5">
-              <h3 className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--accent)' }}>Score Comparison</h3>
-              <div className="flex items-center justify-center">
-                <svg viewBox="0 0 300 300" width="300" height="300">
-                  {/* Background grid */}
-                  {[1, 2, 3, 4, 5].map(level => {
-                    const r = (level / 5) * 120;
-                    const points = SCORE_CRITERIA.map((_, i) => {
-                      const angle = (Math.PI * 2 * i) / SCORE_CRITERIA.length - Math.PI / 2;
-                      return `${150 + r * Math.cos(angle)},${150 + r * Math.sin(angle)}`;
-                    }).join(' ');
-                    return <polygon key={level} points={points} fill="none" stroke="var(--border)" strokeWidth="0.5" opacity={0.5} />;
-                  })}
-                  {/* Axis lines */}
-                  {SCORE_CRITERIA.map((c, i) => {
-                    const angle = (Math.PI * 2 * i) / SCORE_CRITERIA.length - Math.PI / 2;
-                    return (
-                      <g key={c.key}>
-                        <line x1="150" y1="150" x2={150 + 120 * Math.cos(angle)} y2={150 + 120 * Math.sin(angle)} stroke="var(--border)" strokeWidth="0.5" />
-                        <text x={150 + 138 * Math.cos(angle)} y={150 + 138 * Math.sin(angle)} textAnchor="middle" dominantBaseline="middle" fontSize="8" fill="var(--muted-foreground)">
-                          {c.label.split(' ')[0]}
-                        </text>
-                      </g>
-                    );
-                  })}
-                  {/* Target polygons */}
-                  {selectedTargets.map((t, ti) => {
-                    if (!t.score) return null;
-                    const points = SCORE_CRITERIA.map((c, i) => {
-                      const val = t.score?.[c.key] || 0;
-                      const r = (val / 5) * 120;
-                      const angle = (Math.PI * 2 * i) / SCORE_CRITERIA.length - Math.PI / 2;
-                      return `${150 + r * Math.cos(angle)},${150 + r * Math.sin(angle)}`;
-                    }).join(' ');
-                    return (
-                      <polygon key={t.id} points={points} fill={`${COMPARE_COLORS[ti]}20`} stroke={COMPARE_COLORS[ti]} strokeWidth="2" />
-                    );
-                  })}
-                </svg>
-              </div>
-              {/* Legend */}
-              <div className="flex items-center justify-center gap-4 mt-3">
-                {selectedTargets.filter(t => t.score).map((t, i) => (
-                  <div key={t.id} className="flex items-center gap-1.5 text-xs">
-                    <div className="w-3 h-3 rounded-sm" style={{ background: COMPARE_COLORS[i] }} />
-                    <span>{t.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Comparison Summary / Recommendation */}
-          {selectedTargets.length >= 2 && selectedTargets.some(t => t.weighted_score) && (
-            <div className="glass-card p-5">
-              <h3 className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--accent)' }}>Comparison Summary</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Highest Overall Score */}
-                {(() => {
-                  const scored = selectedTargets.filter(t => t.weighted_score);
-                  if (scored.length === 0) return null;
-                  const best = scored.reduce((a, b) => (a.weighted_score || 0) >= (b.weighted_score || 0) ? a : b);
-                  return (
-                    <div className="p-3 rounded-lg" style={{ background: 'rgba(16,185,129,0.08)' }}>
-                      <div className="text-xs font-medium mb-1" style={{ color: 'var(--success)' }}>Highest Score</div>
-                      <div className="font-semibold text-sm">{best.name}</div>
-                      <div className="text-lg font-bold font-mono" style={{ color: 'var(--success)' }}>{best.weighted_score?.toFixed(1)}</div>
-                    </div>
-                  );
-                })()}
-                {/* Best Value (lowest EV/ARR) */}
-                {(() => {
-                  const withMultiple = selectedTargets.filter(t => t.asking_price && t.arr);
-                  if (withMultiple.length < 2) return null;
-                  const best = withMultiple.reduce((a, b) => (a.asking_price! / a.arr!) <= (b.asking_price! / b.arr!) ? a : b);
-                  return (
-                    <div className="p-3 rounded-lg" style={{ background: 'rgba(59,130,246,0.08)' }}>
-                      <div className="text-xs font-medium mb-1" style={{ color: 'var(--accent)' }}>Best Value (EV/ARR)</div>
-                      <div className="font-semibold text-sm">{best.name}</div>
-                      <div className="text-lg font-bold font-mono" style={{ color: 'var(--accent)' }}>{(best.asking_price! / best.arr!).toFixed(1)}x</div>
-                    </div>
-                  );
-                })()}
-                {/* Highest Growth */}
-                {(() => {
-                  const withGrowth = selectedTargets.filter(t => t.yoy_growth_pct);
-                  if (withGrowth.length < 2) return null;
-                  const best = withGrowth.reduce((a, b) => (a.yoy_growth_pct || 0) >= (b.yoy_growth_pct || 0) ? a : b);
-                  return (
-                    <div className="p-3 rounded-lg" style={{ background: 'rgba(139,92,246,0.08)' }}>
-                      <div className="text-xs font-medium mb-1" style={{ color: '#8b5cf6' }}>Highest Growth</div>
-                      <div className="font-semibold text-sm">{best.name}</div>
-                      <div className="text-lg font-bold font-mono" style={{ color: '#8b5cf6' }}>{best.yoy_growth_pct}%</div>
-                    </div>
-                  );
-                })()}
-              </div>
-              {/* Per-criterion winners */}
-              <div className="mt-4 space-y-1">
-                <div className="text-xs font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>Criterion Leaders</div>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {SCORE_CRITERIA.map(c => {
-                    const withScore = selectedTargets.filter(t => t.score?.[c.key]);
-                    if (withScore.length < 2) return null;
-                    const best = withScore.reduce((a, b) => (a.score?.[c.key] || 0) >= (b.score?.[c.key] || 0) ? a : b);
-                    const idx = selectedTargets.indexOf(best);
-                    return (
-                      <div key={c.key} className="flex items-center gap-2 text-xs p-1.5 rounded" style={{ background: 'var(--background)' }}>
-                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: COMPARE_COLORS[idx] || 'var(--accent)' }} />
-                        <span style={{ color: 'var(--muted)' }}>{c.label.split(' ').slice(0, 2).join(' ')}</span>
-                        <span className="ml-auto font-mono font-bold">{best.name.split(' ')[0]}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Quick add */}
           <div className="flex gap-2">
             {selectedTargets.length < 5 && (
@@ -423,6 +312,271 @@ ${allRows.map(row => `<tr><td>${row.label}</td>${selectedTargets.map(t => `<td c
             </div>
             <button onClick={() => setShowPicker(false)} className="btn btn-secondary w-full btn-sm">Cancel</button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Hex color to rgba with given alpha */
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+const RADAR_SHORT_LABELS: Record<string, string> = {
+  diversified_customers: 'Diversified',
+  low_churn: 'Low Churn',
+  mission_critical: 'Mission Crit.',
+  market_share: 'Mkt Share',
+  fragmented_competition: 'Fragmented',
+  growth_potential: 'Growth',
+};
+
+function CompareRadar({ targets }: { targets: Target[] }) {
+  const size = 400;
+  const center = size / 2;
+  const maxRadius = 140;
+  const count = SCORE_CRITERIA.length;
+  const angleStep = (2 * Math.PI) / count;
+
+  const getPoint = (value: number, index: number): [number, number] => {
+    const angle = angleStep * index - Math.PI / 2;
+    const radius = (value / 5) * maxRadius;
+    return [center + radius * Math.cos(angle), center + radius * Math.sin(angle)];
+  };
+
+  const gridPoints = (level: number) =>
+    SCORE_CRITERIA.map((_, i) => {
+      const [x, y] = getPoint(level, i);
+      return `${x},${y}`;
+    }).join(' ');
+
+  return (
+    <div className="glass-card p-5">
+      <h3 className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--accent)' }}>
+        Acquisition Score Overlay
+      </h3>
+      <div className="flex items-center justify-center">
+        <svg
+          viewBox={`0 0 ${size} ${size}`}
+          style={{ width: '100%', maxWidth: '400px', height: 'auto' }}
+        >
+          {/* Concentric grid polygons (hexagons for 6 criteria) */}
+          {[1, 2, 3, 4, 5].map(level => (
+            <polygon
+              key={level}
+              points={gridPoints(level)}
+              fill="none"
+              stroke="var(--border)"
+              strokeWidth={level === 5 ? 1.5 : 0.5}
+              strokeDasharray={level < 5 ? '3,3' : 'none'}
+              opacity={0.6}
+            />
+          ))}
+
+          {/* Axis lines and labels */}
+          {SCORE_CRITERIA.map((c, i) => {
+            const [ax, ay] = getPoint(5, i);
+            const [lx, ly] = getPoint(6.1, i);
+            return (
+              <g key={c.key}>
+                <line x1={center} y1={center} x2={ax} y2={ay} stroke="var(--border)" strokeWidth={0.5} />
+                <text
+                  x={lx}
+                  y={ly}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize="10"
+                  fill="var(--muted-foreground)"
+                  fontWeight={500}
+                >
+                  {RADAR_SHORT_LABELS[c.key] || c.label}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Scale labels on first axis */}
+          {[1, 2, 3, 4, 5].map(level => {
+            const [x, y] = getPoint(level, 0);
+            return (
+              <text key={level} x={x + 8} y={y - 4} fontSize="8" fill="var(--muted)" textAnchor="start">
+                {level}
+              </text>
+            );
+          })}
+
+          {/* Target score polygons - overlaid with 20% opacity fill */}
+          {targets.map((t, ti) => {
+            if (!t.score) return null;
+            const points = SCORE_CRITERIA.map((c, i) => {
+              const val = t.score?.[c.key] || 0;
+              const [x, y] = getPoint(val, i);
+              return `${x},${y}`;
+            }).join(' ');
+            const color = COMPARE_COLORS[ti];
+            return (
+              <g key={t.id}>
+                <polygon
+                  points={points}
+                  fill={hexToRgba(color, 0.2)}
+                  stroke={color}
+                  strokeWidth="2"
+                />
+                {/* Score dots at each vertex */}
+                {SCORE_CRITERIA.map((c, i) => {
+                  const val = t.score?.[c.key] || 0;
+                  if (val === 0) return null;
+                  const [x, y] = getPoint(val, i);
+                  return (
+                    <circle
+                      key={c.key}
+                      cx={x}
+                      cy={y}
+                      r={3}
+                      fill={color}
+                      stroke="var(--card)"
+                      strokeWidth={1.5}
+                    />
+                  );
+                })}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      {/* Legend */}
+      <div className="flex items-center justify-center gap-4 mt-3 flex-wrap">
+        {targets.filter(t => t.score).map((t, i) => (
+          <div key={t.id} className="flex items-center gap-1.5 text-xs">
+            <div className="w-3 h-3 rounded-sm" style={{ background: COMPARE_COLORS[i] }} />
+            <span>{t.name}</span>
+            {t.weighted_score != null && (
+              <span className="font-mono font-semibold" style={{ color: COMPARE_COLORS[i] }}>
+                ({t.weighted_score.toFixed(1)})
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function QuickSummary({ targets }: { targets: Target[] }) {
+  // Count how many criteria each target leads in
+  const leaderTally: Record<string, number> = {};
+  targets.forEach(t => { leaderTally[t.id] = 0; });
+
+  SCORE_CRITERIA.forEach(c => {
+    const withScore = targets.filter(t => t.score?.[c.key]);
+    if (withScore.length < 2) return;
+    const best = withScore.reduce((a, b) => (a.score?.[c.key] || 0) >= (b.score?.[c.key] || 0) ? a : b);
+    leaderTally[best.id] = (leaderTally[best.id] || 0) + 1;
+  });
+
+  // Find the target leading in the most criteria
+  const mostLeads = targets.reduce((a, b) => (leaderTally[a.id] || 0) >= (leaderTally[b.id] || 0) ? a : b);
+
+  // Find the highest weighted score target
+  const scored = targets.filter(t => t.weighted_score);
+  const bestOverall = scored.length > 0
+    ? scored.reduce((a, b) => (a.weighted_score || 0) >= (b.weighted_score || 0) ? a : b)
+    : null;
+
+  // Best value (lowest EV/ARR)
+  const withMultiple = targets.filter(t => t.asking_price && t.arr);
+  const bestValue = withMultiple.length >= 2
+    ? withMultiple.reduce((a, b) => (a.asking_price! / a.arr!) <= (b.asking_price! / b.arr!) ? a : b)
+    : null;
+
+  // Highest growth
+  const withGrowth = targets.filter(t => t.yoy_growth_pct);
+  const bestGrowth = withGrowth.length >= 2
+    ? withGrowth.reduce((a, b) => (a.yoy_growth_pct || 0) >= (b.yoy_growth_pct || 0) ? a : b)
+    : null;
+
+  // Overall recommendation
+  const recommendation = bestOverall
+    ? bestOverall.weighted_score! >= 4
+      ? `${bestOverall.name} is a strong acquisition candidate with a weighted score of ${bestOverall.weighted_score!.toFixed(1)}/5.`
+      : bestOverall.weighted_score! >= 3
+        ? `${bestOverall.name} leads with a score of ${bestOverall.weighted_score!.toFixed(1)}/5, but further diligence is recommended.`
+        : `No target scores above 3.0. Consider expanding the pipeline before proceeding.`
+    : null;
+
+  return (
+    <div className="glass-card p-5">
+      <h3 className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--accent)' }}>
+        Quick Summary
+      </h3>
+
+      {/* Stat cards row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Highest Overall Score */}
+        {bestOverall && (
+          <div className="p-3 rounded-lg" style={{ background: 'rgba(16,185,129,0.08)' }}>
+            <div className="text-xs font-medium mb-1" style={{ color: 'var(--success)' }}>Highest Score</div>
+            <div className="font-semibold text-sm">{bestOverall.name}</div>
+            <div className="text-lg font-bold font-mono" style={{ color: 'var(--success)' }}>{bestOverall.weighted_score?.toFixed(1)}</div>
+          </div>
+        )}
+        {/* Most Criteria Leads */}
+        {(leaderTally[mostLeads.id] || 0) > 0 && (
+          <div className="p-3 rounded-lg" style={{ background: 'rgba(245,158,11,0.08)' }}>
+            <div className="text-xs font-medium mb-1" style={{ color: 'var(--warning)' }}>Most Criteria Leads</div>
+            <div className="font-semibold text-sm">{mostLeads.name}</div>
+            <div className="text-lg font-bold font-mono" style={{ color: 'var(--warning)' }}>
+              {leaderTally[mostLeads.id]}/{SCORE_CRITERIA.length}
+            </div>
+          </div>
+        )}
+        {/* Best Value */}
+        {bestValue && (
+          <div className="p-3 rounded-lg" style={{ background: 'rgba(59,130,246,0.08)' }}>
+            <div className="text-xs font-medium mb-1" style={{ color: 'var(--accent)' }}>Best Value (EV/ARR)</div>
+            <div className="font-semibold text-sm">{bestValue.name}</div>
+            <div className="text-lg font-bold font-mono" style={{ color: 'var(--accent)' }}>{(bestValue.asking_price! / bestValue.arr!).toFixed(1)}x</div>
+          </div>
+        )}
+        {/* Highest Growth */}
+        {bestGrowth && (
+          <div className="p-3 rounded-lg" style={{ background: 'rgba(139,92,246,0.08)' }}>
+            <div className="text-xs font-medium mb-1" style={{ color: '#8b5cf6' }}>Highest Growth</div>
+            <div className="font-semibold text-sm">{bestGrowth.name}</div>
+            <div className="text-lg font-bold font-mono" style={{ color: '#8b5cf6' }}>{bestGrowth.yoy_growth_pct}%</div>
+          </div>
+        )}
+      </div>
+
+      {/* Per-criterion leaders */}
+      <div className="mt-4 space-y-1">
+        <div className="text-xs font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>Criterion Leaders</div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {SCORE_CRITERIA.map(c => {
+            const withScore = targets.filter(t => t.score?.[c.key]);
+            if (withScore.length < 2) return null;
+            const best = withScore.reduce((a, b) => (a.score?.[c.key] || 0) >= (b.score?.[c.key] || 0) ? a : b);
+            const idx = targets.indexOf(best);
+            return (
+              <div key={c.key} className="flex items-center gap-2 text-xs p-1.5 rounded" style={{ background: 'var(--background)' }}>
+                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: COMPARE_COLORS[idx] || 'var(--accent)' }} />
+                <span style={{ color: 'var(--muted)' }}>{c.label.split(' ').slice(0, 2).join(' ')}</span>
+                <span className="ml-auto font-mono font-bold">{best.name.split(' ')[0]}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Overall recommendation */}
+      {recommendation && (
+        <div className="mt-4 p-3 rounded-lg text-sm" style={{ background: 'var(--background)', borderLeft: '3px solid var(--accent)' }}>
+          <span className="text-xs font-semibold uppercase" style={{ color: 'var(--accent)' }}>Recommendation: </span>
+          {recommendation}
         </div>
       )}
     </div>
