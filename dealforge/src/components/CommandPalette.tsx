@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Target, FileSearch, BarChart3, ArrowUpDown, Settings, LayoutDashboard, Clock, Mail, Keyboard } from 'lucide-react';
+import { Search, Target, FileSearch, BarChart3, ArrowUpDown, Settings, LayoutDashboard, Clock, Mail, Keyboard, Calculator } from 'lucide-react';
 import { getTargets, getDDProjects, getContacts, getTouchpoints } from '@/lib/db';
 import type { Target as TargetType, DDProject, Contact, Touchpoint } from '@/lib/types';
 import { Users, MessageSquare } from 'lucide-react';
@@ -22,6 +22,7 @@ const PAGES: SearchResult[] = [
   { id: 'targets', type: 'page', label: 'Targets', href: '/targets', icon: <Target size={16} /> },
   { id: 'compare', type: 'page', label: 'Compare Targets', href: '/compare', icon: <ArrowUpDown size={16} /> },
   { id: 'analytics', type: 'page', label: 'Analytics', href: '/analytics', icon: <BarChart3 size={16} /> },
+  { id: 'valuation', type: 'page', label: 'Valuation Calculator', href: '/valuation', icon: <Calculator size={16} /> },
   { id: 'diligence', type: 'page', label: 'Due Diligence', href: '/diligence', icon: <FileSearch size={16} /> },
   { id: 'outreach', type: 'page', label: 'Outreach Templates', href: '/outreach', icon: <Mail size={16} /> },
   { id: 'activity', type: 'page', label: 'Activity Feed', href: '/activity', icon: <Clock size={16} /> },

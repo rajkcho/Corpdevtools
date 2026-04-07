@@ -19,6 +19,7 @@ import {
   Sun,
   Moon,
   Users,
+  Calculator,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { getNotificationCounts, getAlerts, type NotificationCounts, type Alert } from '@/lib/notifications';
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/contacts', label: 'Contacts', icon: Users },
   { href: '/outreach', label: 'Outreach', icon: Mail },
+  { href: '/valuation', label: 'Valuation', icon: Calculator },
   { href: '/diligence', label: 'Due Diligence', icon: FileSearch },
   { href: '/activity', label: 'Activity', icon: Clock },
   { href: '/settings', label: 'Settings', icon: Settings },
