@@ -280,6 +280,73 @@ export default function ComparePage() {
             </div>
           )}
 
+          {/* Comparison Summary / Recommendation */}
+          {selectedTargets.length >= 2 && selectedTargets.some(t => t.weighted_score) && (
+            <div className="glass-card p-5">
+              <h3 className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--accent)' }}>Comparison Summary</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Highest Overall Score */}
+                {(() => {
+                  const scored = selectedTargets.filter(t => t.weighted_score);
+                  if (scored.length === 0) return null;
+                  const best = scored.reduce((a, b) => (a.weighted_score || 0) >= (b.weighted_score || 0) ? a : b);
+                  return (
+                    <div className="p-3 rounded-lg" style={{ background: 'rgba(16,185,129,0.08)' }}>
+                      <div className="text-xs font-medium mb-1" style={{ color: 'var(--success)' }}>Highest Score</div>
+                      <div className="font-semibold text-sm">{best.name}</div>
+                      <div className="text-lg font-bold font-mono" style={{ color: 'var(--success)' }}>{best.weighted_score?.toFixed(1)}</div>
+                    </div>
+                  );
+                })()}
+                {/* Best Value (lowest EV/ARR) */}
+                {(() => {
+                  const withMultiple = selectedTargets.filter(t => t.asking_price && t.arr);
+                  if (withMultiple.length < 2) return null;
+                  const best = withMultiple.reduce((a, b) => (a.asking_price! / a.arr!) <= (b.asking_price! / b.arr!) ? a : b);
+                  return (
+                    <div className="p-3 rounded-lg" style={{ background: 'rgba(59,130,246,0.08)' }}>
+                      <div className="text-xs font-medium mb-1" style={{ color: 'var(--accent)' }}>Best Value (EV/ARR)</div>
+                      <div className="font-semibold text-sm">{best.name}</div>
+                      <div className="text-lg font-bold font-mono" style={{ color: 'var(--accent)' }}>{(best.asking_price! / best.arr!).toFixed(1)}x</div>
+                    </div>
+                  );
+                })()}
+                {/* Highest Growth */}
+                {(() => {
+                  const withGrowth = selectedTargets.filter(t => t.yoy_growth_pct);
+                  if (withGrowth.length < 2) return null;
+                  const best = withGrowth.reduce((a, b) => (a.yoy_growth_pct || 0) >= (b.yoy_growth_pct || 0) ? a : b);
+                  return (
+                    <div className="p-3 rounded-lg" style={{ background: 'rgba(139,92,246,0.08)' }}>
+                      <div className="text-xs font-medium mb-1" style={{ color: '#8b5cf6' }}>Highest Growth</div>
+                      <div className="font-semibold text-sm">{best.name}</div>
+                      <div className="text-lg font-bold font-mono" style={{ color: '#8b5cf6' }}>{best.yoy_growth_pct}%</div>
+                    </div>
+                  );
+                })()}
+              </div>
+              {/* Per-criterion winners */}
+              <div className="mt-4 space-y-1">
+                <div className="text-xs font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>Criterion Leaders</div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {SCORE_CRITERIA.map(c => {
+                    const withScore = selectedTargets.filter(t => t.score?.[c.key]);
+                    if (withScore.length < 2) return null;
+                    const best = withScore.reduce((a, b) => (a.score?.[c.key] || 0) >= (b.score?.[c.key] || 0) ? a : b);
+                    const idx = selectedTargets.indexOf(best);
+                    return (
+                      <div key={c.key} className="flex items-center gap-2 text-xs p-1.5 rounded" style={{ background: 'var(--background)' }}>
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: COMPARE_COLORS[idx] || 'var(--accent)' }} />
+                        <span style={{ color: 'var(--muted)' }}>{c.label.split(' ').slice(0, 2).join(' ')}</span>
+                        <span className="ml-auto font-mono font-bold">{best.name.split(' ')[0]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Quick add */}
           <div className="flex gap-2">
             {selectedTargets.length < 5 && (

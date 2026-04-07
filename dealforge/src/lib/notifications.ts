@@ -3,7 +3,7 @@
 // Computes badges and alerts from current data state
 // ============================================================
 
-import { getTargets, getTouchpoints, getInfoRequests, getDDProjects } from './db';
+import { getTargets, getTouchpoints, getInfoRequests, getDDProjects, getContacts } from './db';
 import type { Target, InformationRequest } from './types';
 
 export interface NotificationCounts {
@@ -11,6 +11,7 @@ export interface NotificationCounts {
   overdueFollowUps: number;
   overdueIRLs: number;
   activeDD: number;
+  targetsWithoutContacts: number;
   total: number;
 }
 
@@ -54,12 +55,21 @@ export function getNotificationCounts(): NotificationCounts {
   // Active DD projects
   const activeDD = getDDProjects().filter(p => p.status !== 'complete').length;
 
+  // Targets without contacts (in active stages beyond 'identified')
+  const allContacts = getContacts();
+  const advancedStages = ['contacted', 'nurturing', 'loi_submitted', 'loi_signed', 'due_diligence', 'closing'];
+  const targetsWithoutContacts = targets.filter(t =>
+    advancedStages.includes(t.stage) &&
+    allContacts.filter(c => c.target_id === t.id).length === 0
+  ).length;
+
   return {
     staleDeals,
     overdueFollowUps,
     overdueIRLs,
     activeDD,
-    total: staleDeals + overdueFollowUps + overdueIRLs,
+    targetsWithoutContacts,
+    total: staleDeals + overdueFollowUps + overdueIRLs + targetsWithoutContacts,
   };
 }
 
@@ -122,6 +132,25 @@ export function getAlerts(): Alert[] {
         title: `Overdue IRL #${ir.request_number}: ${ir.title}`,
         description: `Information request was due ${days} days ago.`,
         href: '/diligence',
+      });
+    }
+  }
+
+  // Targets without contacts in advanced stages
+  const allContacts = getContacts();
+  const advancedStages = ['contacted', 'nurturing', 'loi_submitted', 'loi_signed', 'due_diligence', 'closing'];
+  for (const t of targets) {
+    if (!advancedStages.includes(t.stage)) continue;
+    if (allContacts.filter(c => c.target_id === t.id).length === 0) {
+      alerts.push({
+        id: `nocontact-${t.id}`,
+        type: 'stale_deal',
+        severity: 'warning',
+        title: `${t.name}: no contacts`,
+        description: `Target is in "${t.stage}" stage but has no contacts tracked.`,
+        targetId: t.id,
+        targetName: t.name,
+        href: `/targets/${t.id}`,
       });
     }
   }

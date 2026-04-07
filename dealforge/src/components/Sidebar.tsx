@@ -38,7 +38,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [counts, setCounts] = useState<NotificationCounts>({ staleDeals: 0, overdueFollowUps: 0, overdueIRLs: 0, activeDD: 0, total: 0 });
+  const [counts, setCounts] = useState<NotificationCounts>({ staleDeals: 0, overdueFollowUps: 0, overdueIRLs: 0, activeDD: 0, targetsWithoutContacts: 0, total: 0 });
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [showAlerts, setShowAlerts] = useState(false);
 
