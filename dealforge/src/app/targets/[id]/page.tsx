@@ -522,51 +522,137 @@ export default function TargetDetailPage() {
 
       {/* Scoring Tab */}
       {activeTab === 'scoring' && (
-        <div className="glass-card p-5">
-          <h2 className="font-semibold mb-4">VMS Acquisition Scorecard</h2>
+        <div className="space-y-4">
+          <div className="glass-card p-5">
+            <h2 className="font-semibold mb-4">VMS Acquisition Scorecard</h2>
 
-          {/* Radar Chart */}
-          {target.score && (
-            <div className="flex justify-center mb-6">
-              <RadarChart score={target.score} size={280} />
-            </div>
-          )}
+            {/* Radar Chart */}
+            {target.score && (
+              <div className="flex justify-center mb-6">
+                <RadarChart score={target.score} size={280} />
+              </div>
+            )}
 
-          <div className="grid gap-4">
-            {SCORE_CRITERIA.map(c => {
-              const val = target.score?.[c.key] || 0;
-              return (
-                <div key={c.key} className="flex items-center gap-4">
-                  <div className="w-48">
-                    <div className="text-sm font-medium">{c.label}</div>
-                    <div className="text-xs" style={{ color: 'var(--muted)' }}>Weight: {c.weight}x</div>
+            <div className="grid gap-4">
+              {SCORE_CRITERIA.map(c => {
+                const val = target.score?.[c.key] || 0;
+                return (
+                  <div key={c.key} className="flex items-center gap-4">
+                    <div className="w-48">
+                      <div className="text-sm font-medium">{c.label}</div>
+                      <div className="text-xs" style={{ color: 'var(--muted)' }}>{c.description}</div>
+                    </div>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map(n => (
+                        <button
+                          key={n}
+                          onClick={() => {
+                            const newScore = { ...(target.score || {} as Record<string, number>), [c.key]: n };
+                            updateTarget(id, { score: newScore as Target['score'] });
+                            reload();
+                          }}
+                          className="w-8 h-8 rounded-lg text-xs font-bold transition-all"
+                          style={{
+                            background: n <= val ? (val >= 4 ? 'var(--success)' : val >= 3 ? 'var(--warning)' : 'var(--danger)') : 'var(--background)',
+                            color: n <= val ? 'white' : 'var(--muted)',
+                            border: n === val ? 'none' : '1px solid var(--border)',
+                          }}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                    <span className="text-xs font-mono" style={{ color: 'var(--muted)' }}>
+                      ×{c.weight}
+                    </span>
                   </div>
-                  <div className="flex-1 h-4 rounded-full overflow-hidden" style={{ background: 'var(--background)' }}>
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${(val / 5) * 100}%`,
-                        background: val >= 4 ? 'var(--success)' : val >= 3 ? 'var(--warning)' : 'var(--danger)',
-                      }}
-                    />
-                  </div>
-                  <span className="text-sm font-mono w-8 text-right font-bold" style={{
-                    color: val >= 4 ? 'var(--success)' : val >= 3 ? 'var(--warning)' : 'var(--danger)',
-                  }}>
-                    {val}/5
-                  </span>
-                </div>
-              );
-            })}
-            <div className="flex items-center justify-between pt-4 mt-2 border-t" style={{ borderColor: 'var(--border)' }}>
-              <span className="font-semibold">Weighted Score</span>
-              <span className="text-2xl font-bold font-mono" style={{
-                color: (target.weighted_score || 0) >= 4 ? 'var(--success)' : (target.weighted_score || 0) >= 3 ? 'var(--warning)' : 'var(--danger)',
-              }}>
-                {target.weighted_score?.toFixed(1) || '-'} / 5.0
-              </span>
+                );
+              })}
+              <div className="flex items-center justify-between pt-4 mt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+                <span className="font-semibold">Weighted Score</span>
+                <span className="text-2xl font-bold font-mono" style={{
+                  color: (target.weighted_score || 0) >= 4 ? 'var(--success)' : (target.weighted_score || 0) >= 3 ? 'var(--warning)' : 'var(--danger)',
+                }}>
+                  {target.weighted_score?.toFixed(1) || '-'} / 5.0
+                </span>
+              </div>
             </div>
           </div>
+
+          {/* Valuation Quick Calc */}
+          {(target.revenue || target.arr || target.ebita) && (
+            <div className="glass-card p-5">
+              <h2 className="font-semibold mb-4">Valuation Sensitivity</h2>
+              <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>
+                Implied enterprise values at various multiples
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b" style={{ borderColor: 'var(--border)' }}>
+                      <th className="text-left py-2 px-3 text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Metric</th>
+                      <th className="text-left py-2 px-3 text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Base</th>
+                      {[2, 3, 4, 5, 6, 8].map(m => (
+                        <th key={m} className="text-right py-2 px-3 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{m}x</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {target.revenue && (
+                      <tr className="border-b" style={{ borderColor: 'var(--border)' }}>
+                        <td className="py-2 px-3 font-medium">Revenue</td>
+                        <td className="py-2 px-3 font-mono">${(target.revenue / 1e6).toFixed(1)}M</td>
+                        {[2, 3, 4, 5, 6, 8].map(m => {
+                          const ev = target.revenue! * m;
+                          const isAsk = target.asking_price && Math.abs(ev - target.asking_price) / target.asking_price < 0.1;
+                          return (
+                            <td key={m} className="py-2 px-3 text-right font-mono" style={{ color: isAsk ? 'var(--accent)' : undefined, fontWeight: isAsk ? 700 : undefined }}>
+                              ${(ev / 1e6).toFixed(1)}M
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    )}
+                    {target.arr && (
+                      <tr className="border-b" style={{ borderColor: 'var(--border)' }}>
+                        <td className="py-2 px-3 font-medium">ARR</td>
+                        <td className="py-2 px-3 font-mono">${(target.arr / 1e6).toFixed(1)}M</td>
+                        {[2, 3, 4, 5, 6, 8].map(m => {
+                          const ev = target.arr! * m;
+                          const isAsk = target.asking_price && Math.abs(ev - target.asking_price) / target.asking_price < 0.1;
+                          return (
+                            <td key={m} className="py-2 px-3 text-right font-mono" style={{ color: isAsk ? 'var(--accent)' : undefined, fontWeight: isAsk ? 700 : undefined }}>
+                              ${(ev / 1e6).toFixed(1)}M
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    )}
+                    {target.ebita && target.ebita > 0 && (
+                      <tr>
+                        <td className="py-2 px-3 font-medium">EBITA</td>
+                        <td className="py-2 px-3 font-mono">${(target.ebita / 1e6).toFixed(1)}M</td>
+                        {[2, 3, 4, 5, 6, 8].map(m => {
+                          const ev = target.ebita! * m;
+                          const isAsk = target.asking_price && Math.abs(ev - target.asking_price) / target.asking_price < 0.1;
+                          return (
+                            <td key={m} className="py-2 px-3 text-right font-mono" style={{ color: isAsk ? 'var(--accent)' : undefined, fontWeight: isAsk ? 700 : undefined }}>
+                              ${(ev / 1e6).toFixed(1)}M
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {target.asking_price && (
+                <p className="text-xs mt-2" style={{ color: 'var(--accent)' }}>
+                  Highlighted values are within 10% of asking price (${(target.asking_price / 1e6).toFixed(1)}M)
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -3,7 +3,7 @@
 // Generates realistic sample data for testing and demos
 // ============================================================
 
-import { createTarget, createTouchpoint, createContact, createDDProject, createDDRisk, createDDFinding, createInfoRequest, populateDDTemplates } from './db';
+import { createTarget, createTouchpoint, createContact, createDDProject, createDDRisk, createDDFinding, createInfoRequest, populateDDTemplates, createDealTerm, createJournalEntry } from './db';
 import type { DealStage, Vertical } from './types';
 
 const SAMPLE_TARGETS: {
@@ -223,6 +223,63 @@ export function seedDemoData(): void {
     status: 'draft',
     workstream_key: 'hr',
   });
+
+  // Add deal terms for the LOI target (CivicTrack Pro)
+  const loiTargetIdx = SAMPLE_TARGETS.findIndex(t => t.stage === 'loi_submitted');
+  if (loiTargetIdx >= 0) {
+    const loiTargetId = targetIds[loiTargetIdx];
+    createDealTerm({ target_id: loiTargetId, category: 'valuation', label: 'Enterprise Value', value: '$28M (4.3x ARR)' });
+    createDealTerm({ target_id: loiTargetId, category: 'valuation', label: 'Earnout', value: '15% held back, tied to 2-year revenue retention' });
+    createDealTerm({ target_id: loiTargetId, category: 'structure', label: 'Transaction Type', value: 'Asset purchase' });
+    createDealTerm({ target_id: loiTargetId, category: 'structure', label: 'Financing', value: '100% cash at close' });
+    createDealTerm({ target_id: loiTargetId, category: 'conditions', label: 'Exclusivity', value: '60 days from LOI signing' });
+    createDealTerm({ target_id: loiTargetId, category: 'conditions', label: 'Key Person Retention', value: 'Founder 3-year employment agreement required' });
+    createDealTerm({ target_id: loiTargetId, category: 'timeline', label: 'Target Close', value: 'Q3 2026' });
+    createDealTerm({ target_id: loiTargetId, category: 'timeline', label: 'DD Period', value: '45 business days' });
+
+    // Add journal entries
+    createJournalEntry({
+      target_id: loiTargetId,
+      title: 'Initial Thesis',
+      content: 'CivicTrack Pro is a strong fit for the VMS playbook. Municipal permitting software is extremely sticky — switching costs are astronomical due to data migration and retraining requirements. 83% recurring revenue with 180 municipal customers across the Southeast.\n\nKey thesis: consolidation play. There are 3-4 smaller competitors in the region that could be tuck-in acquisitions within 2 years of closing.',
+      tags: ['thesis', 'consolidation', 'VMS'],
+      pinned: true,
+    });
+    createJournalEntry({
+      target_id: loiTargetId,
+      title: 'Founder Meeting Notes',
+      content: 'Met Robert Mitchell in Atlanta. Genuinely great operator — built the company over 15 years from a single county deployment. He\'s motivated by succession planning rather than a quick exit.\n\nConcerns:\n- His VP Engineering has only been there 8 months\n- One large county (Fulton) is ~11% of revenue\n- The product has a desktop client that needs modernization\n\nPositives:\n- Average customer tenure is 9.2 years\n- NRR is 103% even without aggressive upselling\n- Clean financials, no debt',
+      tags: ['meeting', 'founder', 'assessment'],
+    });
+
+    // Add overdue follow-up for the nurturing target
+    const nurturingIdx = SAMPLE_TARGETS.findIndex(t => t.name === 'MedChart Systems');
+    if (nurturingIdx >= 0) {
+      createTouchpoint({
+        target_id: targetIds[nurturingIdx],
+        type: 'email',
+        subject: 'Follow up on financial data request',
+        summary: 'Sent request for preliminary financials. Need to follow up if no response.',
+        date: new Date(Date.now() - 20 * 86400000).toISOString(),
+        follow_up_date: new Date(Date.now() - 5 * 86400000).toISOString(),
+        follow_up_notes: 'Call Dr. Chen if no email response by Friday',
+      });
+    }
+
+    // Add overdue follow-up for TransitOps
+    const transitIdx = SAMPLE_TARGETS.findIndex(t => t.name === 'TransitOps');
+    if (transitIdx >= 0) {
+      createTouchpoint({
+        target_id: targetIds[transitIdx],
+        type: 'call',
+        subject: 'Quarterly catch-up call',
+        summary: 'Good conversation. David mentioned considering strategic options in 12-18 months.',
+        date: new Date(Date.now() - 45 * 86400000).toISOString(),
+        follow_up_date: new Date(Date.now() - 15 * 86400000).toISOString(),
+        follow_up_notes: 'Send industry report and schedule next check-in',
+      });
+    }
+  }
 }
 
 export function hasDemoData(): boolean {
