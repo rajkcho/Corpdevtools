@@ -1173,7 +1173,24 @@ function IRLPanel({ projectId, requests, workstreams, onReload }: { projectId: s
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">Information Request List (IRL)</h2>
-        <button onClick={() => setShowAdd(true)} className="btn btn-primary btn-sm"><Plus size={14} /> Add Request</button>
+        <div className="flex gap-2">
+          <button
+            onClick={async () => {
+              const { generateIRLDocument } = await import('@/lib/irl-templates');
+              const targetName = workstreams.length > 0 ? document.title.split(' - ')[0] || 'Target' : 'Target';
+              const buyerCompany = typeof window !== 'undefined' ? localStorage.getItem('dealforge_your_company') || '' : '';
+              const wsKeys = workstreams.map(w => w.key);
+              const html = generateIRLDocument(targetName, wsKeys.length > 0 ? wsKeys : ['financial', 'customer', 'technology', 'legal', 'hr', 'commercial', 'operational'], buyerCompany);
+              const w = window.open('', '_blank');
+              if (w) { w.document.write(html); w.document.close(); }
+            }}
+            className="btn btn-secondary btn-sm"
+            title="Generate standard IRL document"
+          >
+            Generate IRL
+          </button>
+          <button onClick={() => setShowAdd(true)} className="btn btn-primary btn-sm"><Plus size={14} /> Add Request</button>
+        </div>
       </div>
 
       {/* Summary */}
