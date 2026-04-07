@@ -1033,13 +1033,29 @@ function IRLPanel({ projectId, requests, workstreams, onReload }: { projectId: s
                     </span>
                   </div>
                   {r.description && <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>{r.description}</p>}
-                  {r.due_date && (
-                    <span className="text-xs mt-1 inline-block" style={{ color: new Date(r.due_date) < new Date() ? 'var(--danger)' : 'var(--muted)' }}>
-                      Due: {new Date(r.due_date).toLocaleDateString()}
-                    </span>
+                  <div className="flex items-center gap-3 mt-1">
+                    {r.due_date && (
+                      <span className="text-xs" style={{ color: new Date(r.due_date) < new Date() && r.status !== 'complete' ? 'var(--danger)' : 'var(--muted)' }}>
+                        Due: {new Date(r.due_date).toLocaleDateString()}
+                        {new Date(r.due_date) < new Date() && r.status !== 'complete' && ' (overdue)'}
+                      </span>
+                    )}
+                    <span className="badge capitalize text-xs" style={{ background: 'var(--background)' }}>{r.priority}</span>
+                  </div>
+                  {r.response_notes && (
+                    <div className="text-xs mt-2 p-2 rounded" style={{ background: 'var(--background)', color: 'var(--muted-foreground)' }}>
+                      <span className="font-medium">Response: </span>{r.response_notes}
+                    </div>
                   )}
+                  <input
+                    placeholder="Add response notes..."
+                    defaultValue={r.response_notes || ''}
+                    onBlur={e => { if (e.target.value !== (r.response_notes || '')) { updateInfoRequest(r.id, { response_notes: e.target.value }); onReload(); } }}
+                    className="w-full text-xs mt-2"
+                    style={{ padding: '0.25rem 0.5rem' }}
+                  />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <select
                     value={r.status}
                     onChange={e => { updateInfoRequest(r.id, { status: e.target.value as InformationRequest['status'] }); onReload(); }}
@@ -1172,6 +1188,24 @@ function DocumentsPanel({ projectId, documents, workstreams, onReload }: { proje
         <h2 className="font-semibold">Document Vault</h2>
         <button onClick={() => setShowAdd(true)} className="btn btn-primary btn-sm"><Upload size={14} /> Upload Document</button>
       </div>
+      {/* Category summary */}
+      {documents.length > 0 && (
+        <div className="glass-card p-3 flex flex-wrap gap-2">
+          {Object.entries(categoryLabels)
+            .map(([key, label]) => ({ key, label, count: documents.filter(d => d.category === key).length }))
+            .filter(c => c.count > 0)
+            .map(c => (
+              <span key={c.key} className="badge" style={{ background: 'var(--background)', color: 'var(--muted-foreground)' }}>
+                {c.label}: {c.count}
+              </span>
+            ))
+          }
+          <span className="text-xs ml-auto" style={{ color: 'var(--muted)' }}>
+            Total: {formatSize(documents.reduce((sum, d) => sum + (d.file_size || 0), 0))}
+          </span>
+        </div>
+      )}
+
       {documents.length === 0 ? (
         <div className="glass-card p-8 text-center" style={{ color: 'var(--muted)' }}>
           <Upload size={32} className="mx-auto mb-2 opacity-50" />
