@@ -215,6 +215,32 @@ export default function TargetDetailPage() {
           >
             <FileOutput size={14} />
           </button>
+          <button
+            onClick={async () => {
+              const { generateDealSummary } = await import('@/lib/deal-summary');
+              const contacts = getContacts(id);
+              const tps = getTouchpoints(id);
+              const terms = getDealTerms(id);
+              const journals = getJournalEntries(id);
+              const thesisRaw = typeof window !== 'undefined' ? localStorage.getItem(`dealforge_thesis_${id}`) : null;
+              const compsRaw = typeof window !== 'undefined' ? localStorage.getItem(`dealforge_competitors_${id}`) : null;
+              const html = generateDealSummary({
+                target,
+                contacts,
+                touchpoints: tps,
+                dealTerms: terms,
+                journalEntries: journals,
+                thesis: thesisRaw ? JSON.parse(thesisRaw) : undefined,
+                competitors: compsRaw ? JSON.parse(compsRaw) : undefined,
+              });
+              const w = window.open('', '_blank');
+              if (w) { w.document.write(html); w.document.close(); }
+            }}
+            className="btn btn-secondary btn-sm"
+            title="One-page deal summary"
+          >
+            Summary
+          </button>
           <button onClick={() => setShowEditModal(true)} className="btn btn-secondary btn-sm">
             <Edit2 size={14} /> Edit
           </button>
