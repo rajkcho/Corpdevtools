@@ -936,6 +936,48 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Scratchpad */}
+      <ScratchPad />
+    </div>
+  );
+}
+
+function ScratchPad() {
+  const [notes, setNotes] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    const raw = localStorage.getItem('dealforge_scratchpad');
+    if (raw) setNotes(raw);
+  }, []);
+
+  const handleSave = () => {
+    localStorage.setItem('dealforge_scratchpad', notes);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="glass-card p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <FileText size={16} style={{ color: 'var(--accent)' }} /> Quick Notes
+        </h2>
+        <div className="flex items-center gap-2">
+          {saved && <span className="text-xs" style={{ color: 'var(--success)' }}>Saved</span>}
+          <button onClick={handleSave} className="btn btn-secondary btn-sm">Save</button>
+        </div>
+      </div>
+      <textarea
+        value={notes}
+        onChange={e => setNotes(e.target.value)}
+        onBlur={handleSave}
+        placeholder="Jot down quick thoughts, meeting reminders, or deal observations..."
+        className="w-full text-sm"
+        rows={3}
+        style={{ resize: 'vertical', minHeight: 60 }}
+      />
     </div>
   );
 }

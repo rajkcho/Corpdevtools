@@ -52,7 +52,7 @@ export default function TargetDetailPage() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showScoringWizard, setShowScoringWizard] = useState(false);
-  const [activeTab, setActiveTab] = useState<'timeline' | 'notes' | 'contacts' | 'journal' | 'dealroom' | 'scoring' | 'integration'>('timeline');
+  const [activeTab, setActiveTab] = useState<'timeline' | 'notes' | 'contacts' | 'journal' | 'dealroom' | 'scoring' | 'swot' | 'integration'>('timeline');
   const [ddProjectId, setDDProjectId] = useState<string | null>(null);
   const [dealTerms, setDealTerms] = useState<DealTerm[]>([]);
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
@@ -471,6 +471,7 @@ export default function TargetDetailPage() {
           { key: 'journal', label: 'Journal' },
           { key: 'dealroom', label: 'Deal Room' },
           { key: 'scoring', label: 'Scoring' },
+          { key: 'swot', label: 'SWOT' },
           ...(['closing', 'closed_won'].includes(target.stage) ? [{ key: 'integration' as const, label: '100-Day Plan' }] : []),
         ] as const).map(tab => (
           <button
@@ -943,6 +944,11 @@ export default function TargetDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* SWOT Tab */}
+      {activeTab === 'swot' && (
+        <SWOTPanel targetId={id} targetName={target.name} />
       )}
 
       {/* Integration Tab */}
@@ -2241,6 +2247,143 @@ function MilestoneTracker({ targetId }: { targetId: string }) {
           <div key={key} className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full" style={{ background: color }} />
             <span className="text-[10px] capitalize" style={{ color: 'var(--muted)' }}>{key}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// === SWOT ANALYSIS PANEL ===
+interface SWOTData {
+  strengths: string[];
+  weaknesses: string[];
+  opportunities: string[];
+  threats: string[];
+}
+
+function SWOTPanel({ targetId, targetName }: { targetId: string; targetName: string }) {
+  const [swot, setSwot] = useState<SWOTData>({ strengths: [], weaknesses: [], opportunities: [], threats: [] });
+  const [editing, setEditing] = useState<string | null>(null);
+  const [newItem, setNewItem] = useState('');
+
+  useEffect(() => {
+    const raw = localStorage.getItem(`dealforge_swot_${targetId}`);
+    if (raw) setSwot(JSON.parse(raw));
+  }, [targetId]);
+
+  const save = (updated: SWOTData) => {
+    setSwot(updated);
+    localStorage.setItem(`dealforge_swot_${targetId}`, JSON.stringify(updated));
+  };
+
+  const addItem = (quadrant: keyof SWOTData) => {
+    if (!newItem.trim()) return;
+    save({ ...swot, [quadrant]: [...swot[quadrant], newItem.trim()] });
+    setNewItem('');
+    setEditing(null);
+  };
+
+  const removeItem = (quadrant: keyof SWOTData, index: number) => {
+    save({ ...swot, [quadrant]: swot[quadrant].filter((_, i) => i !== index) });
+  };
+
+  const QUADRANTS: { key: keyof SWOTData; label: string; color: string; bg: string; icon: string; description: string }[] = [
+    { key: 'strengths', label: 'Strengths', color: '#10b981', bg: 'rgba(16,185,129,0.08)', icon: '💪', description: 'Internal advantages and competitive differentiators' },
+    { key: 'weaknesses', label: 'Weaknesses', color: '#ef4444', bg: 'rgba(239,68,68,0.08)', icon: '⚡', description: 'Internal limitations and areas of concern' },
+    { key: 'opportunities', label: 'Opportunities', color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', icon: '🎯', description: 'External factors that could drive growth post-acquisition' },
+    { key: 'threats', label: 'Threats', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', icon: '⚠️', description: 'External risks and competitive pressures' },
+  ];
+
+  const totalItems = swot.strengths.length + swot.weaknesses.length + swot.opportunities.length + swot.threats.length;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-semibold">SWOT Analysis</h2>
+          <p className="text-xs" style={{ color: 'var(--muted)' }}>{targetName} — {totalItems} items across 4 quadrants</p>
+        </div>
+        <button
+          onClick={() => {
+            const lines = ['SWOT ANALYSIS: ' + targetName, '', ...QUADRANTS.flatMap(q => [
+              q.label.toUpperCase(),
+              ...swot[q.key].map((item, i) => `  ${i + 1}. ${item}`),
+              '',
+            ])];
+            const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `swot-${targetName.replace(/\s+/g, '-').toLowerCase()}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          className="btn btn-secondary btn-sm"
+          disabled={totalItems === 0}
+        >
+          <Download size={14} /> Export
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {QUADRANTS.map(q => (
+          <div key={q.key} className="rounded-xl border p-4" style={{ background: q.bg, borderColor: `${q.color}30` }}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{q.icon}</span>
+                <div>
+                  <h3 className="text-sm font-semibold" style={{ color: q.color }}>{q.label}</h3>
+                  <p className="text-[10px]" style={{ color: 'var(--muted)' }}>{q.description}</p>
+                </div>
+              </div>
+              <span className="text-xs font-mono" style={{ color: q.color }}>{swot[q.key].length}</span>
+            </div>
+
+            <div className="space-y-1.5 mb-3">
+              {swot[q.key].map((item, i) => (
+                <div key={i} className="flex items-start gap-2 group">
+                  <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 mt-0.5" style={{ background: `${q.color}20`, color: q.color }}>
+                    {i + 1}
+                  </span>
+                  <span className="text-xs flex-1">{item}</span>
+                  <button
+                    onClick={() => removeItem(q.key, i)}
+                    className="opacity-0 group-hover:opacity-100 text-xs p-0.5 rounded transition-opacity"
+                    style={{ color: 'var(--danger)' }}
+                  >
+                    <Trash2 size={10} />
+                  </button>
+                </div>
+              ))}
+              {swot[q.key].length === 0 && (
+                <p className="text-[10px] italic py-2" style={{ color: 'var(--muted)' }}>No items yet. Click + to add.</p>
+              )}
+            </div>
+
+            {editing === q.key ? (
+              <div className="flex items-center gap-1">
+                <input
+                  autoFocus
+                  value={newItem}
+                  onChange={e => setNewItem(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addItem(q.key); if (e.key === 'Escape') { setEditing(null); setNewItem(''); } }}
+                  placeholder={`Add ${q.label.toLowerCase()} item...`}
+                  className="text-xs flex-1"
+                  style={{ padding: '4px 8px' }}
+                />
+                <button onClick={() => addItem(q.key)} className="btn btn-primary btn-sm text-xs px-2 py-1">Add</button>
+                <button onClick={() => { setEditing(null); setNewItem(''); }} className="btn btn-ghost btn-sm text-xs px-2 py-1">Cancel</button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setEditing(q.key); setNewItem(''); }}
+                className="w-full text-left text-xs px-2 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                style={{ color: q.color, background: `${q.color}10` }}
+              >
+                <Plus size={12} /> Add item
+              </button>
+            )}
           </div>
         ))}
       </div>

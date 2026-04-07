@@ -25,6 +25,7 @@ export default function TargetsPage() {
   const [filterGeo, setFilterGeo] = useState<string>('all');
   const [filterScoreMin, setFilterScoreMin] = useState<string>('');
   const [filterSource, setFilterSource] = useState<string>('all');
+  const [filterTag, setFilterTag] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
   const reload = useCallback(() => setTargets(getTargets()), []);
@@ -32,6 +33,7 @@ export default function TargetsPage() {
 
   const verticals = Array.from(new Set(targets.map(t => t.vertical))).sort();
   const geographies = Array.from(new Set(targets.map(t => t.geography).filter(Boolean))).sort();
+  const allTags = Array.from(new Set(targets.flatMap(t => t.tags || []))).sort();
 
   const filtered = targets
     .filter(t => {
@@ -39,6 +41,7 @@ export default function TargetsPage() {
       if (filterVertical !== 'all' && t.vertical !== filterVertical) return false;
       if (filterGeo !== 'all' && t.geography !== filterGeo) return false;
       if (filterSource !== 'all' && t.source !== filterSource) return false;
+      if (filterTag !== 'all' && !(t.tags || []).includes(filterTag)) return false;
       if (filterScoreMin && (t.weighted_score || 0) < Number(filterScoreMin)) return false;
       if (!search) return true;
       const q = search.toLowerCase();
@@ -173,6 +176,12 @@ export default function TargetsPage() {
           <option value="referral">Referral</option>
           <option value="other">Other</option>
         </select>
+        {allTags.length > 0 && (
+          <select value={filterTag} onChange={e => setFilterTag(e.target.value)} className="text-sm">
+            <option value="all">All Tags</option>
+            {allTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+          </select>
+        )}
         <select value={filterScoreMin} onChange={e => setFilterScoreMin(e.target.value)} className="text-sm">
           <option value="">Min Score: Any</option>
           <option value="2">Min Score: 2.0+</option>
@@ -196,9 +205,9 @@ export default function TargetsPage() {
             Table
           </button>
         </div>
-        {(filterStage !== 'all' || filterVertical !== 'all' || filterGeo !== 'all' || filterSource !== 'all' || filterScoreMin || search) && (
+        {(filterStage !== 'all' || filterVertical !== 'all' || filterGeo !== 'all' || filterSource !== 'all' || filterTag !== 'all' || filterScoreMin || search) && (
           <button
-            onClick={() => { setFilterStage('all'); setFilterVertical('all'); setFilterGeo('all'); setFilterSource('all'); setFilterScoreMin(''); setSearch(''); }}
+            onClick={() => { setFilterStage('all'); setFilterVertical('all'); setFilterGeo('all'); setFilterSource('all'); setFilterTag('all'); setFilterScoreMin(''); setSearch(''); }}
             className="text-xs"
             style={{ color: 'var(--accent)' }}
           >
