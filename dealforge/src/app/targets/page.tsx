@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, Download, Upload } from 'lucide-react';
+import { Plus, Search, Download, Upload, CheckSquare, Square, Trash2, ArrowRight, Tag } from 'lucide-react';
 import Link from 'next/link';
-import { getTargets, createTarget, exportTargetsCSV, importTargetsFromCSV } from '@/lib/db';
+import { getTargets, createTarget, updateTarget, deleteTarget, exportTargetsCSV, importTargetsFromCSV } from '@/lib/db';
 import { DEAL_STAGES, VERTICALS } from '@/lib/types';
-import type { Target } from '@/lib/types';
+import type { Target, DealStage } from '@/lib/types';
 import Modal from '@/components/Modal';
 import TargetForm from '@/components/TargetForm';
 
@@ -17,6 +17,9 @@ export default function TargetsPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [filterStage, setFilterStage] = useState<string>('all');
   const [filterVertical, setFilterVertical] = useState<string>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkStage, setBulkStage] = useState<string>('');
+  const [bulkTag, setBulkTag] = useState<string>('');
 
   const reload = useCallback(() => setTargets(getTargets()), []);
   useEffect(() => { reload(); }, [reload]);
@@ -39,6 +42,51 @@ export default function TargetsPage() {
       else if (sortBy === 'revenue') cmp = (a.revenue || 0) - (b.revenue || 0);
       return sortDir === 'desc' ? -cmp : cmp;
     });
+
+  const toggleSelect = (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    const ids = filtered.map(t => t.id);
+    setSelectedIds(prev => prev.size === ids.length ? new Set() : new Set(ids));
+  };
+
+  const handleBulkStageChange = () => {
+    if (!bulkStage || selectedIds.size === 0) return;
+    for (const id of selectedIds) updateTarget(id, { stage: bulkStage as DealStage });
+    setSelectedIds(new Set());
+    setBulkStage('');
+    reload();
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} target(s)? This cannot be undone.`)) return;
+    for (const id of selectedIds) deleteTarget(id);
+    setSelectedIds(new Set());
+    reload();
+  };
+
+  const handleBulkTag = () => {
+    if (!bulkTag.trim() || selectedIds.size === 0) return;
+    const tag = bulkTag.trim();
+    for (const id of selectedIds) {
+      const t = targets.find(x => x.id === id);
+      if (t) {
+        const existing = t.tags || [];
+        if (!existing.includes(tag)) updateTarget(id, { tags: [...existing, tag] });
+      }
+    }
+    setBulkTag('');
+    reload();
+  };
 
   const handleExport = () => {
     const csv = exportTargetsCSV();
@@ -128,13 +176,70 @@ export default function TargetsPage() {
         </div>
       )}
 
+      {/* Bulk Actions Bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 p-3 rounded-lg flex-wrap" style={{ background: 'var(--accent-muted)', border: '1px solid var(--accent)' }}>
+          <span className="text-sm font-medium" style={{ color: 'var(--accent)' }}>
+            {selectedIds.size} selected
+          </span>
+          <select value={bulkStage} onChange={e => setBulkStage(e.target.value)} className="text-sm" style={{ width: 160 }}>
+            <option value="">Move to stage...</option>
+            {DEAL_STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+          <button onClick={handleBulkStageChange} disabled={!bulkStage} className="btn btn-primary btn-sm">
+            <ArrowRight size={14} /> Move
+          </button>
+          <div className="flex items-center gap-1">
+            <input
+              value={bulkTag}
+              onChange={e => setBulkTag(e.target.value)}
+              placeholder="Add tag..."
+              className="text-sm"
+              style={{ width: 120, padding: '0.25rem 0.5rem' }}
+              onKeyDown={e => { if (e.key === 'Enter') handleBulkTag(); }}
+            />
+            <button onClick={handleBulkTag} disabled={!bulkTag.trim()} className="btn btn-secondary btn-sm">
+              <Tag size={14} />
+            </button>
+          </div>
+          <button onClick={handleBulkDelete} className="btn btn-danger btn-sm">
+            <Trash2 size={14} /> Delete
+          </button>
+          <button onClick={() => setSelectedIds(new Set())} className="btn btn-ghost btn-sm ml-auto">
+            Clear
+          </button>
+        </div>
+      )}
+
+      {/* Select All */}
+      {filtered.length > 0 && (
+        <div className="flex items-center gap-2">
+          <button onClick={selectAll} className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+            {selectedIds.size === filtered.length && filtered.length > 0
+              ? <CheckSquare size={14} style={{ color: 'var(--accent)' }} />
+              : <Square size={14} />}
+            Select All
+          </button>
+        </div>
+      )}
+
       {/* Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map(t => {
           const daysInStage = Math.floor((Date.now() - new Date(t.stage_entered_at).getTime()) / 86400000);
           const staleWarning = daysInStage > 30 && !['closed_won', 'closed_lost'].includes(t.stage);
+          const isSelected = selectedIds.has(t.id);
           return (
-            <Link key={t.id} href={`/targets/${t.id}`} className="glass-card p-4 hover:border-opacity-80 transition-all">
+            <div key={t.id} className="glass-card p-4 hover:border-opacity-80 transition-all relative" style={isSelected ? { borderColor: 'var(--accent)' } : {}}>
+              <button
+                onClick={e => toggleSelect(t.id, e)}
+                className="absolute top-2 left-2 z-10 p-0.5"
+              >
+                {isSelected
+                  ? <CheckSquare size={16} style={{ color: 'var(--accent)' }} />
+                  : <Square size={16} style={{ color: 'var(--muted)', opacity: 0.4 }} />}
+              </button>
+              <Link href={`/targets/${t.id}`} className="block pl-5">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="font-semibold">{t.name}</div>
@@ -202,6 +307,7 @@ export default function TargetsPage() {
                 </div>
               )}
             </Link>
+            </div>
           );
         })}
       </div>

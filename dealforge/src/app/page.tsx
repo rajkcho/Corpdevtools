@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react';
 import {
   Target, KanbanSquare, FileSearch, AlertTriangle, DollarSign,
-  Clock, TrendingUp, Calendar, BarChart3, Plus, Mail, ArrowUpDown,
+  Clock, TrendingUp, Calendar, BarChart3, Plus, Mail, ArrowUpDown, Users,
 } from 'lucide-react';
 import Link from 'next/link';
-import { getTargets, getDDProjects, getDDRisks, getTouchpoints, getDDFindings, getInfoRequests, getActivities } from '@/lib/db';
+import { getTargets, getDDProjects, getDDRisks, getTouchpoints, getDDFindings, getInfoRequests, getActivities, getContacts } from '@/lib/db';
 import type { ActivityEntry } from '@/lib/types';
 import { DEAL_STAGES, VERTICALS } from '@/lib/types';
-import type { Target as TargetType, DDProject, DDRisk, Touchpoint } from '@/lib/types';
+import type { Target as TargetType, DDProject, DDRisk, Touchpoint, Contact } from '@/lib/types';
 import RAGDot from '@/components/RAGDot';
 import ProgressBar from '@/components/ProgressBar';
 
@@ -20,6 +20,7 @@ export default function DashboardPage() {
   const [touchpoints, setTouchpoints] = useState<Touchpoint[]>([]);
   const [allTargets, setAllTargets] = useState<TargetType[]>([]);
   const [recentActivities, setRecentActivities] = useState<ActivityEntry[]>([]);
+  const [allContacts, setAllContacts] = useState<Contact[]>([]);
 
   useEffect(() => {
     const t = getTargets();
@@ -29,6 +30,7 @@ export default function DashboardPage() {
     setRisks(getDDRisks());
     setTouchpoints(getTouchpoints());
     setRecentActivities(getActivities(15));
+    setAllContacts(getContacts());
   }, []);
 
   const activeTargets = targets.filter(t => !['closed_won', 'closed_lost'].includes(t.stage));
@@ -416,6 +418,93 @@ export default function DashboardPage() {
           })()}
         </div>
       )}
+
+      {/* Overdue Follow-ups + Contacts Overview */}
+      {(() => {
+        const overdueFollowups = touchpoints
+          .filter(tp => tp.follow_up_date && new Date(tp.follow_up_date) < now)
+          .sort((a, b) => new Date(a.follow_up_date!).getTime() - new Date(b.follow_up_date!).getTime())
+          .slice(0, 5)
+          .map(tp => ({
+            ...tp,
+            target_name: allTargets.find(t => t.id === tp.target_id)?.name || 'Unknown',
+            days_overdue: Math.floor((Date.now() - new Date(tp.follow_up_date!).getTime()) / 86400000),
+          }));
+
+        const contactsByTarget = allTargets
+          .filter(t => !['closed_won', 'closed_lost'].includes(t.stage))
+          .map(t => ({
+            target: t,
+            contacts: allContacts.filter(c => c.target_id === t.id),
+            primary: allContacts.find(c => c.target_id === t.id && c.is_primary),
+          }))
+          .filter(x => x.contacts.length > 0)
+          .sort((a, b) => b.contacts.length - a.contacts.length)
+          .slice(0, 6);
+
+        const targetsWithoutContacts = allTargets
+          .filter(t => !['closed_won', 'closed_lost'].includes(t.stage))
+          .filter(t => allContacts.filter(c => c.target_id === t.id).length === 0);
+
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Overdue Follow-ups */}
+            {overdueFollowups.length > 0 && (
+              <div className="glass-card p-5" style={{ borderColor: 'rgba(239,68,68,0.3)' }}>
+                <h2 className="font-semibold mb-3 flex items-center gap-2">
+                  <AlertTriangle size={16} style={{ color: 'var(--danger)' }} /> Overdue Follow-ups ({overdueFollowups.length})
+                </h2>
+                <div className="space-y-2">
+                  {overdueFollowups.map(tp => (
+                    <Link key={tp.id} href={`/targets/${tp.target_id}`} className="flex items-center gap-3 p-2 rounded-lg text-sm" style={{ background: 'var(--background)' }}>
+                      <span className="font-medium">{tp.target_name}</span>
+                      <span className="flex-1 truncate" style={{ color: 'var(--muted-foreground)' }}>{tp.follow_up_notes || tp.subject}</span>
+                      <span className="text-xs font-mono font-bold" style={{ color: 'var(--danger)' }}>
+                        {tp.days_overdue}d overdue
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Contacts Overview */}
+            <div className="glass-card p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold flex items-center gap-2">
+                  <Users size={16} style={{ color: 'var(--accent)' }} /> Contacts ({allContacts.length})
+                </h2>
+              </div>
+              {contactsByTarget.length > 0 ? (
+                <div className="space-y-2">
+                  {contactsByTarget.map(({ target: t, contacts: c, primary }) => (
+                    <Link key={t.id} href={`/targets/${t.id}`} className="flex items-center gap-3 p-2 rounded-lg text-sm" style={{ background: 'var(--background)' }}>
+                      <span className="font-medium flex-1 truncate">{t.name}</span>
+                      {primary && (
+                        <span className="text-xs truncate" style={{ color: 'var(--muted-foreground)', maxWidth: 120 }}>
+                          {primary.name}{primary.title ? ` (${primary.title})` : ''}
+                        </span>
+                      )}
+                      <span className="text-xs font-mono" style={{ color: 'var(--accent)' }}>
+                        {c.length} contact{c.length > 1 ? 's' : ''}
+                      </span>
+                    </Link>
+                  ))}
+                  {targetsWithoutContacts.length > 0 && (
+                    <p className="text-xs mt-2" style={{ color: 'var(--warning)' }}>
+                      {targetsWithoutContacts.length} active target{targetsWithoutContacts.length > 1 ? 's' : ''} without contacts
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-center py-4" style={{ color: 'var(--muted)' }}>
+                  No contacts added yet. Add contacts to track relationships.
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Recent Activity */}
       <div className="glass-card p-5">
