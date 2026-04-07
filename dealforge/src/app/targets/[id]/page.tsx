@@ -13,7 +13,7 @@ import {
   getTarget, updateTarget, deleteTarget,
   getTouchpoints, createTouchpoint, deleteTouchpoint,
   getMeetingNotes, createMeetingNote, deleteMeetingNote,
-  getContacts, createContact, deleteContact,
+  getContacts, createContact, updateContact, deleteContact,
   getDDProjectByTarget, createDDProject, populateDDTemplates,
   getDealTerms, createDealTerm, updateDealTerm, deleteDealTerm,
   getActivitiesForTarget, logActivity,
@@ -500,18 +500,36 @@ export default function TargetDetailPage() {
           {contacts.map(c => (
             <div key={c.id} className="glass-card p-4">
               <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-medium">{c.name} {c.is_primary && <span className="badge" style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>Primary</span>}</div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{c.name}</span>
+                    {c.is_primary && <span className="badge" style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>Primary</span>}
+                  </div>
                   <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{c.title}</div>
+                  {c.email && <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{c.email}</div>}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-1">
                   {c.email && <a href={`mailto:${c.email}`} className="btn btn-ghost btn-sm"><Mail size={14} /></a>}
                   {c.phone && <a href={`tel:${c.phone}`} className="btn btn-ghost btn-sm"><Phone size={14} /></a>}
                   {c.linkedin && <a href={c.linkedin} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm"><Link2 size={14} /></a>}
                   <button onClick={() => { deleteContact(c.id); reload(); }} className="btn btn-ghost btn-sm"><Trash2 size={14} style={{ color: 'var(--danger)' }} /></button>
                 </div>
               </div>
-              {c.notes && <p className="text-sm mt-2" style={{ color: 'var(--muted-foreground)' }}>{c.notes}</p>}
+              <div className="mt-2">
+                <textarea
+                  defaultValue={c.notes || ''}
+                  onBlur={e => {
+                    if (e.target.value !== (c.notes || '')) {
+                      updateContact(c.id, { notes: e.target.value });
+                      reload();
+                    }
+                  }}
+                  placeholder="Add notes about this contact..."
+                  className="w-full text-xs"
+                  rows={2}
+                  style={{ resize: 'none', background: 'var(--background)', padding: '0.375rem 0.5rem' }}
+                />
+              </div>
             </div>
           ))}
         </div>

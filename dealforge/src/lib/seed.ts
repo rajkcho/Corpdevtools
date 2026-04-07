@@ -12,7 +12,7 @@ const SAMPLE_TARGETS: {
   revenue?: number; arr?: number; recurring_revenue_pct?: number;
   gross_margin_pct?: number; ebita_margin_pct?: number;
   customer_count?: number; employee_count?: number;
-  asking_price?: number; description?: string;
+  asking_price?: number; yoy_growth_pct?: number; description?: string;
   founder_name?: string; website?: string;
   score?: { diversified_customers: number; low_churn: number; mission_critical: number; market_share: number; fragmented_competition: number; growth_potential: number };
 }[] = [
@@ -20,7 +20,7 @@ const SAMPLE_TARGETS: {
     name: 'MedChart Systems', vertical: 'Healthcare', geography: 'Ontario, Canada', stage: 'nurturing',
     source: 'proprietary', revenue: 4200000, arr: 3600000, recurring_revenue_pct: 86,
     gross_margin_pct: 78, ebita_margin_pct: 22, customer_count: 340, employee_count: 28,
-    asking_price: 16000000, description: 'EHR and practice management software for outpatient clinics across Canada.',
+    asking_price: 16000000, yoy_growth_pct: 12, description: 'EHR and practice management software for outpatient clinics across Canada.',
     founder_name: 'Dr. Sarah Chen', website: 'https://medchartsystems.example.com',
     score: { diversified_customers: 4, low_churn: 4, mission_critical: 5, market_share: 3, fragmented_competition: 4, growth_potential: 3 },
   },
@@ -28,7 +28,7 @@ const SAMPLE_TARGETS: {
     name: 'CivicTrack Pro', vertical: 'Local Government', geography: 'Southeast US', stage: 'loi_submitted',
     source: 'proprietary', revenue: 7800000, arr: 6500000, recurring_revenue_pct: 83,
     gross_margin_pct: 72, ebita_margin_pct: 18, customer_count: 180, employee_count: 52,
-    asking_price: 28000000, description: 'Permitting, licensing, and code enforcement software for municipalities.',
+    asking_price: 28000000, yoy_growth_pct: 8, description: 'Permitting, licensing, and code enforcement software for municipalities.',
     founder_name: 'Robert Mitchell', website: 'https://civictrackpro.example.com',
     score: { diversified_customers: 4, low_churn: 5, mission_critical: 5, market_share: 4, fragmented_competition: 3, growth_potential: 4 },
   },
@@ -44,7 +44,7 @@ const SAMPLE_TARGETS: {
     name: 'SchoolBridge ERP', vertical: 'Education', geography: 'Western Canada', stage: 'due_diligence',
     source: 'proprietary', revenue: 5500000, arr: 4800000, recurring_revenue_pct: 87,
     gross_margin_pct: 81, ebita_margin_pct: 25, customer_count: 95, employee_count: 38,
-    asking_price: 22000000, description: 'Student information system and administrative ERP for K-12 school districts.',
+    asking_price: 22000000, yoy_growth_pct: 15, description: 'Student information system and administrative ERP for K-12 school districts.',
     founder_name: 'Maria Garcia', website: 'https://schoolbridge.example.com',
     score: { diversified_customers: 3, low_churn: 5, mission_critical: 5, market_share: 4, fragmented_competition: 3, growth_potential: 3 },
   },
