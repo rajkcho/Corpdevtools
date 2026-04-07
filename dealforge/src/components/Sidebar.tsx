@@ -15,9 +15,10 @@ import {
   Clock,
   Search,
   Mail,
+  Bell,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { getNotificationCounts, type NotificationCounts } from '@/lib/notifications';
+import { getNotificationCounts, getAlerts, type NotificationCounts, type Alert } from '@/lib/notifications';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -35,13 +36,15 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [counts, setCounts] = useState<NotificationCounts>({ staleDeals: 0, overdueFollowUps: 0, overdueIRLs: 0, activeDD: 0, total: 0 });
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [showAlerts, setShowAlerts] = useState(false);
 
   useEffect(() => {
     setCounts(getNotificationCounts());
-    // Refresh every 60 seconds
-    const interval = setInterval(() => setCounts(getNotificationCounts()), 60000);
+    setAlerts(getAlerts());
+    const interval = setInterval(() => { setCounts(getNotificationCounts()); setAlerts(getAlerts()); }, 60000);
     return () => clearInterval(interval);
-  }, [pathname]); // Recalc on navigation
+  }, [pathname]);
 
   return (
     <aside
@@ -115,6 +118,50 @@ export default function Sidebar() {
           </button>
         </div>
       )}
+
+      {/* Notification bell */}
+      <div className="px-3 pb-2 relative">
+        <button
+          onClick={() => setShowAlerts(!showAlerts)}
+          className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors relative"
+          style={{ background: counts.total > 0 ? 'rgba(239,68,68,0.1)' : 'var(--background)', color: counts.total > 0 ? 'var(--danger)' : 'var(--muted)' }}
+        >
+          <Bell size={14} />
+          {!collapsed && <span className="flex-1 text-left">{counts.total > 0 ? `${counts.total} alert${counts.total !== 1 ? 's' : ''}` : 'No alerts'}</span>}
+          {counts.total > 0 && (
+            <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: 'rgba(239,68,68,0.2)', color: 'var(--danger)', fontSize: '0.6rem' }}>
+              {counts.total}
+            </span>
+          )}
+        </button>
+        {showAlerts && alerts.length > 0 && (
+          <div
+            className="absolute bottom-full left-0 mb-2 w-72 rounded-xl border shadow-lg overflow-hidden z-50"
+            style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+          >
+            <div className="p-3 border-b" style={{ borderColor: 'var(--border)' }}>
+              <span className="text-xs font-semibold">Alerts ({alerts.length})</span>
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              {alerts.slice(0, 8).map(a => (
+                <Link
+                  key={a.id}
+                  href={a.href}
+                  onClick={() => setShowAlerts(false)}
+                  className="flex items-start gap-2 p-2.5 text-xs border-b transition-colors hover:bg-opacity-50"
+                  style={{ borderColor: 'var(--border)', background: 'transparent' }}
+                >
+                  <span className="w-2 h-2 rounded-full flex-shrink-0 mt-1" style={{ background: a.severity === 'danger' ? 'var(--danger)' : 'var(--warning)' }} />
+                  <div>
+                    <div className="font-medium">{a.title}</div>
+                    <div style={{ color: 'var(--muted)' }}>{a.description}</div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Collapse toggle */}
       <button
