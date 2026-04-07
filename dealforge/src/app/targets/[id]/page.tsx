@@ -181,6 +181,23 @@ export default function TargetDetailPage() {
           </button>
           <button
             onClick={async () => {
+              const { generateLOI } = await import('@/lib/loi-generator');
+              const contacts = getContacts(id);
+              const terms = getDealTerms(id);
+              const buyerName = typeof window !== 'undefined' ? localStorage.getItem('dealforge_your_name') || '' : '';
+              const buyerTitle = typeof window !== 'undefined' ? localStorage.getItem('dealforge_your_title') || '' : '';
+              const buyerCompany = typeof window !== 'undefined' ? localStorage.getItem('dealforge_your_company') || '' : '';
+              const html = generateLOI({ target, contacts, dealTerms: terms, buyerName, buyerTitle, buyerCompany, customClauses: [] });
+              const w = window.open('', '_blank');
+              if (w) { w.document.write(html); w.document.close(); }
+            }}
+            className="btn btn-secondary btn-sm"
+            title="Generate Letter of Intent"
+          >
+            LOI
+          </button>
+          <button
+            onClick={async () => {
               const { generateDealMemo } = await import('@/lib/deal-memo');
               const memo = generateDealMemo(id);
               const blob = new Blob([memo], { type: 'text/plain' });
