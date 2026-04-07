@@ -6,7 +6,7 @@ import {
   ArrowLeft, Edit2, Trash2, Plus, Phone, Mail, Video,
   MessageSquare, Calendar, Upload, FileText, Link2,
   Users, ExternalLink, MapPin, Building2, ChevronDown, ChevronUp,
-  Download, Import, Printer,
+  Download, Import, Printer, FileOutput,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -150,6 +150,23 @@ export default function TargetDetailPage() {
           >
             <Printer size={14} />
           </button>
+          <button
+            onClick={async () => {
+              const { generateDealMemo } = await import('@/lib/deal-memo');
+              const memo = generateDealMemo(id);
+              const blob = new Blob([memo], { type: 'text/plain' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `deal-memo-${target.name.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.txt`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="btn btn-secondary btn-sm"
+            title="Export deal memo"
+          >
+            <FileOutput size={14} />
+          </button>
           <button onClick={() => setShowEditModal(true)} className="btn btn-secondary btn-sm">
             <Edit2 size={14} /> Edit
           </button>
@@ -215,6 +232,25 @@ export default function TargetDetailPage() {
         <MetricCard label="Customers" value={target.customer_count?.toLocaleString() || '-'} />
         <MetricCard label="YoY Growth" value={target.yoy_growth_pct ? `${target.yoy_growth_pct}%` : '-'} />
         <MetricCard label="Score" value={target.weighted_score?.toFixed(1) || '-'} highlight />
+        {/* Financial Health Indicator */}
+        {(() => {
+          let score = 0;
+          let count = 0;
+          if (target.recurring_revenue_pct) { score += target.recurring_revenue_pct >= 80 ? 3 : target.recurring_revenue_pct >= 60 ? 2 : 1; count++; }
+          if (target.gross_margin_pct) { score += target.gross_margin_pct >= 70 ? 3 : target.gross_margin_pct >= 50 ? 2 : 1; count++; }
+          if (target.ebita_margin_pct) { score += target.ebita_margin_pct >= 20 ? 3 : target.ebita_margin_pct >= 10 ? 2 : 1; count++; }
+          if (target.yoy_growth_pct) { score += target.yoy_growth_pct >= 15 ? 3 : target.yoy_growth_pct >= 5 ? 2 : 1; count++; }
+          if (count === 0) return null;
+          const avg = score / count;
+          const color = avg >= 2.5 ? 'var(--success)' : avg >= 1.5 ? 'var(--warning)' : 'var(--danger)';
+          const label = avg >= 2.5 ? 'Strong' : avg >= 1.5 ? 'Fair' : 'Weak';
+          return (
+            <div className="glass-card p-3 text-center">
+              <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Health</div>
+              <div className="font-bold" style={{ color }}>{label}</div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Implied Multiples (shown when asking price exists) */}
