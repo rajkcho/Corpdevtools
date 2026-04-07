@@ -9,7 +9,7 @@ import type {
   DDProject, DDWorkstream, DDTask, DDRisk, DDFinding,
   InformationRequest, DDDocument, ApprovalGate,
   DealStage, DealScore, DDStatus, RAGStatus,
-  ActivityEntry, ActivityType, DealTerm,
+  ActivityEntry, ActivityType, DealTerm, JournalEntry,
 } from './types';
 import { SCORE_CRITERIA, DD_WORKSTREAMS } from './types';
 import { DD_TASK_TEMPLATES } from './dd-templates';
@@ -712,6 +712,50 @@ export function updateDealTerm(id: string, data: Partial<DealTerm>): void {
 
 export function deleteDealTerm(id: string): void {
   setStore('deal_terms', getStore<DealTerm>('deal_terms').filter(dt => dt.id !== id));
+}
+
+// --- Journal Entries ---
+
+export function getJournalEntries(targetId: string): JournalEntry[] {
+  const all = getStore<JournalEntry>('journal_entries');
+  return all
+    .filter(j => j.target_id === targetId)
+    .sort((a, b) => {
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    });
+}
+
+export function createJournalEntry(data: Partial<JournalEntry>): JournalEntry {
+  const entries = getStore<JournalEntry>('journal_entries');
+  const entry: JournalEntry = {
+    id: uuidv4(),
+    target_id: data.target_id || '',
+    title: data.title || '',
+    content: data.content || '',
+    tags: data.tags || [],
+    pinned: data.pinned || false,
+    created_at: now(),
+    updated_at: now(),
+    ...data,
+  };
+  entries.push(entry);
+  setStore('journal_entries', entries);
+  return entry;
+}
+
+export function updateJournalEntry(id: string, data: Partial<JournalEntry>): void {
+  const entries = getStore<JournalEntry>('journal_entries');
+  const idx = entries.findIndex(j => j.id === id);
+  if (idx !== -1) {
+    entries[idx] = { ...entries[idx], ...data, updated_at: now() };
+    setStore('journal_entries', entries);
+  }
+}
+
+export function deleteJournalEntry(id: string): void {
+  setStore('journal_entries', getStore<JournalEntry>('journal_entries').filter(j => j.id !== id));
 }
 
 // --- Export Utilities ---

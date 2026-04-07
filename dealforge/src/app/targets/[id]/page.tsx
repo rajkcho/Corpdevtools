@@ -18,9 +18,10 @@ import {
   getDealTerms, createDealTerm, updateDealTerm, deleteDealTerm,
   getActivitiesForTarget, logActivity,
   exportContactsCSV, importContactsFromCSV,
+  getJournalEntries, createJournalEntry, updateJournalEntry, deleteJournalEntry,
 } from '@/lib/db';
 import { DEAL_STAGES, SCORE_CRITERIA } from '@/lib/types';
-import type { Target, Touchpoint, MeetingNote, Contact, DealScore, DealTerm, ActivityEntry } from '@/lib/types';
+import type { Target, Touchpoint, MeetingNote, Contact, DealScore, DealTerm, ActivityEntry, JournalEntry } from '@/lib/types';
 import Modal from '@/components/Modal';
 import TargetForm from '@/components/TargetForm';
 import RadarChart from '@/components/RadarChart';
@@ -48,10 +49,11 @@ export default function TargetDetailPage() {
   const [showTouchpointModal, setShowTouchpointModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'timeline' | 'notes' | 'contacts' | 'scoring' | 'dealroom'>('timeline');
+  const [activeTab, setActiveTab] = useState<'timeline' | 'notes' | 'contacts' | 'journal' | 'dealroom' | 'scoring'>('timeline');
   const [ddProjectId, setDDProjectId] = useState<string | null>(null);
   const [dealTerms, setDealTerms] = useState<DealTerm[]>([]);
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
+  const [journal, setJournal] = useState<JournalEntry[]>([]);
 
   const reload = useCallback(() => {
     const t = getTarget(id);
@@ -64,6 +66,7 @@ export default function TargetDetailPage() {
     setDDProjectId(dd?.id || null);
     setDealTerms(getDealTerms(id));
     setActivities(getActivitiesForTarget(id));
+    setJournal(getJournalEntries(id));
   }, [id, router]);
 
   useEffect(() => { reload(); }, [reload]);
@@ -151,6 +154,7 @@ export default function TargetDetailPage() {
           { key: 'timeline', label: 'Timeline' },
           { key: 'notes', label: 'Meeting Notes' },
           { key: 'contacts', label: 'Contacts' },
+          { key: 'journal', label: 'Journal' },
           { key: 'dealroom', label: 'Deal Room' },
           { key: 'scoring', label: 'Scoring' },
         ] as const).map(tab => (
@@ -330,6 +334,11 @@ export default function TargetDetailPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Journal Tab */}
+      {activeTab === 'journal' && (
+        <JournalPanel targetId={id} entries={journal} onReload={reload} />
       )}
 
       {/* Deal Room Tab */}
@@ -704,6 +713,140 @@ function MeetingNoteUpload({ targetId, targetName, onDone, onCancel }: { targetI
         </button>
       </div>
     </form>
+  );
+}
+
+// === JOURNAL PANEL ===
+function JournalPanel({ targetId, entries, onReload }: { targetId: string; entries: JournalEntry[]; onReload: () => void }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ title: '', content: '', tags: '' });
+
+  const handleAdd = () => {
+    createJournalEntry({
+      target_id: targetId,
+      title: form.title,
+      content: form.content,
+      tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
+    });
+    setForm({ title: '', content: '', tags: '' });
+    setShowAdd(false);
+    onReload();
+  };
+
+  const handleUpdate = (id: string) => {
+    updateJournalEntry(id, {
+      title: form.title,
+      content: form.content,
+      tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
+    });
+    setEditingId(null);
+    setForm({ title: '', content: '', tags: '' });
+    onReload();
+  };
+
+  const startEdit = (entry: JournalEntry) => {
+    setEditingId(entry.id);
+    setForm({ title: entry.title, content: entry.content, tags: entry.tags.join(', ') });
+  };
+
+  const TAG_COLORS = ['var(--accent)', 'var(--success)', 'var(--warning)', '#8b5cf6', '#ec4899', '#f97316'];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold">Deal Journal</h2>
+        <button onClick={() => { setShowAdd(true); setEditingId(null); setForm({ title: '', content: '', tags: '' }); }} className="btn btn-primary btn-sm">
+          <Plus size={14} /> New Entry
+        </button>
+      </div>
+
+      {(showAdd || editingId) && (
+        <div className="glass-card p-4 space-y-3">
+          <input
+            value={form.title}
+            onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+            placeholder="Entry title..."
+            className="w-full text-sm font-medium"
+          />
+          <textarea
+            value={form.content}
+            onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+            placeholder="Write your thoughts, analysis, observations..."
+            className="w-full text-sm"
+            rows={8}
+            style={{ lineHeight: 1.6 }}
+          />
+          <input
+            value={form.tags}
+            onChange={e => setForm(f => ({ ...f, tags: e.target.value }))}
+            placeholder="Tags (comma-separated): valuation, risk, culture..."
+            className="w-full text-sm"
+          />
+          <div className="flex justify-end gap-2">
+            <button onClick={() => { setShowAdd(false); setEditingId(null); }} className="btn btn-secondary btn-sm">Cancel</button>
+            {editingId ? (
+              <button onClick={() => handleUpdate(editingId)} disabled={!form.title} className="btn btn-primary btn-sm">Save</button>
+            ) : (
+              <button onClick={handleAdd} disabled={!form.title} className="btn btn-primary btn-sm">Add Entry</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {entries.length === 0 && !showAdd && (
+        <div className="glass-card p-8 text-center" style={{ color: 'var(--muted)' }}>
+          <FileText size={32} className="mx-auto mb-2 opacity-50" />
+          <p className="text-sm">No journal entries yet.</p>
+          <p className="text-xs mt-1">Use the journal to track your thinking, analysis notes, and observations about this deal.</p>
+        </div>
+      )}
+
+      {entries.map(entry => (
+        <div key={entry.id} className="glass-card p-4">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                {entry.pinned && <span style={{ color: 'var(--warning)', fontSize: '0.7rem' }}>PINNED</span>}
+                <h3 className="font-medium text-sm">{entry.title}</h3>
+              </div>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
+                {new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                {entry.updated_at !== entry.created_at && ' (edited)'}
+              </p>
+            </div>
+            <div className="flex gap-1">
+              <button
+                onClick={() => { updateJournalEntry(entry.id, { pinned: !entry.pinned }); onReload(); }}
+                className="btn btn-ghost btn-sm"
+                title={entry.pinned ? 'Unpin' : 'Pin'}
+                style={{ color: entry.pinned ? 'var(--warning)' : 'var(--muted)' }}
+              >
+                ★
+              </button>
+              <button onClick={() => startEdit(entry)} className="btn btn-ghost btn-sm">
+                <Edit2 size={12} />
+              </button>
+              <button onClick={() => { deleteJournalEntry(entry.id); onReload(); }} className="btn btn-ghost btn-sm">
+                <Trash2 size={12} style={{ color: 'var(--danger)' }} />
+              </button>
+            </div>
+          </div>
+          <div className="mt-2 text-sm whitespace-pre-wrap" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+            {entry.content}
+          </div>
+          {entry.tags.length > 0 && (
+            <div className="flex gap-1 mt-3">
+              {entry.tags.map((tag, i) => (
+                <span key={tag} className="badge" style={{ background: `${TAG_COLORS[i % TAG_COLORS.length]}15`, color: TAG_COLORS[i % TAG_COLORS.length] }}>
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 

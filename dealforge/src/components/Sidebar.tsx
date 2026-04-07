@@ -14,8 +14,10 @@ import {
   ArrowUpDown,
   Clock,
   Search,
+  Mail,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getNotificationCounts, type NotificationCounts } from '@/lib/notifications';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -23,6 +25,7 @@ const NAV_ITEMS = [
   { href: '/targets', label: 'Targets', icon: Target },
   { href: '/compare', label: 'Compare', icon: ArrowUpDown },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { href: '/outreach', label: 'Outreach', icon: Mail },
   { href: '/diligence', label: 'Due Diligence', icon: FileSearch },
   { href: '/activity', label: 'Activity', icon: Clock },
   { href: '/settings', label: 'Settings', icon: Settings },
@@ -31,6 +34,14 @@ const NAV_ITEMS = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [counts, setCounts] = useState<NotificationCounts>({ staleDeals: 0, overdueFollowUps: 0, overdueIRLs: 0, activeDD: 0, total: 0 });
+
+  useEffect(() => {
+    setCounts(getNotificationCounts());
+    // Refresh every 60 seconds
+    const interval = setInterval(() => setCounts(getNotificationCounts()), 60000);
+    return () => clearInterval(interval);
+  }, [pathname]); // Recalc on navigation
 
   return (
     <aside
@@ -71,7 +82,20 @@ export default function Sidebar() {
               }}
             >
               <item.icon size={18} />
-              {!collapsed && <span>{item.label}</span>}
+              {!collapsed && <span className="flex-1">{item.label}</span>}
+              {!collapsed && item.href === '/pipeline' && counts.staleDeals > 0 && (
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: 'rgba(245,158,11,0.2)', color: 'var(--warning)', fontSize: '0.6rem' }}>
+                  {counts.staleDeals}
+                </span>
+              )}
+              {!collapsed && item.href === '/diligence' && counts.overdueIRLs > 0 && (
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: 'rgba(239,68,68,0.2)', color: 'var(--danger)', fontSize: '0.6rem' }}>
+                  {counts.overdueIRLs}
+                </span>
+              )}
+              {collapsed && item.href === '/pipeline' && counts.staleDeals > 0 && (
+                <span className="absolute top-0 right-0 w-2 h-2 rounded-full" style={{ background: 'var(--warning)' }} />
+              )}
             </Link>
           );
         })}

@@ -344,6 +344,17 @@ export interface ActivityEntry {
 
 // --- Deal Room ---
 
+export interface JournalEntry {
+  id: string;
+  target_id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  pinned: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DealTerm {
   id: string;
   target_id: string;
