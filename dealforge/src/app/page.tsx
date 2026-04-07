@@ -93,6 +93,26 @@ export default function DashboardPage() {
         </p>
       </div>
 
+      {/* Data freshness warning */}
+      {(() => {
+        const lastBackup = typeof window !== 'undefined' ? localStorage.getItem('dealforge_last_backup') : null;
+        const daysSinceBackup = lastBackup ? Math.floor((Date.now() - new Date(lastBackup).getTime()) / 86400000) : null;
+        const showWarning = !lastBackup || (daysSinceBackup !== null && daysSinceBackup > 7);
+        if (!showWarning || targets.length === 0) return null;
+        return (
+          <div className="flex items-center gap-3 p-3 rounded-lg text-sm" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
+            <AlertTriangle size={16} style={{ color: 'var(--warning)', flexShrink: 0 }} />
+            <span style={{ color: 'var(--warning)' }}>
+              {!lastBackup ? 'You haven\'t backed up your data yet.' : `Last backup: ${daysSinceBackup}d ago.`}
+              {' '}All data is stored in your browser only.
+            </span>
+            <Link href="/settings" className="btn btn-secondary btn-sm ml-auto flex-shrink-0">
+              Backup Now
+            </Link>
+          </div>
+        );
+      })()}
+
       {/* Stats Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard icon={<Target size={18} />} label="Active Targets" value={activeTargets.length} sub={`${targets.length} total`} color="var(--accent)" />

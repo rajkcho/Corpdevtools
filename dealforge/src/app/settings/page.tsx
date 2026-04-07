@@ -128,6 +128,7 @@ export default function SettingsPage() {
     a.download = `dealforge-backup-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    localStorage.setItem('dealforge_last_backup', new Date().toISOString());
   };
 
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -263,6 +264,50 @@ export default function SettingsPage() {
             <Trash2 size={14} /> Clear All Data
           </button>
         </div>
+      </div>
+
+      {/* Storage Stats */}
+      <div className="glass-card p-5 space-y-4">
+        <h2 className="font-semibold">Storage Usage</h2>
+        {(() => {
+          const keys = typeof window !== 'undefined' ? Object.keys(localStorage).filter(k => k.startsWith('dealforge_')) : [];
+          const totalBytes = keys.reduce((sum, k) => sum + (localStorage.getItem(k)?.length || 0) * 2, 0);
+          const dataBreakdown = keys.map(k => {
+            const size = (localStorage.getItem(k)?.length || 0) * 2;
+            const items = (() => { try { const d = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(d) ? d.length : 1; } catch { return 1; } })();
+            return { key: k.replace('dealforge_', ''), size, items };
+          }).sort((a, b) => b.size - a.size);
+          const lastBackup = typeof window !== 'undefined' ? localStorage.getItem('dealforge_last_backup') : null;
+
+          return (
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                  <div className="text-lg font-bold font-mono">{(totalBytes / 1024).toFixed(0)}KB</div>
+                  <div className="text-xs" style={{ color: 'var(--muted)' }}>Total Storage</div>
+                </div>
+                <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                  <div className="text-lg font-bold font-mono">{keys.length}</div>
+                  <div className="text-xs" style={{ color: 'var(--muted)' }}>Data Collections</div>
+                </div>
+                <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                  <div className="text-lg font-bold font-mono" style={{ color: lastBackup ? 'var(--success)' : 'var(--warning)' }}>
+                    {lastBackup ? `${Math.floor((Date.now() - new Date(lastBackup).getTime()) / 86400000)}d` : 'Never'}
+                  </div>
+                  <div className="text-xs" style={{ color: 'var(--muted)' }}>Last Backup</div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                {dataBreakdown.filter(d => d.size > 0).map(d => (
+                  <div key={d.key} className="flex items-center justify-between text-xs py-1">
+                    <span className="capitalize" style={{ color: 'var(--muted-foreground)' }}>{d.key.replace(/_/g, ' ')}</span>
+                    <span className="font-mono" style={{ color: 'var(--muted)' }}>{d.items} items · {(d.size / 1024).toFixed(1)}KB</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {/* Demo Data */}
