@@ -554,7 +554,36 @@ export default function TargetDetailPage() {
       {activeTab === 'scoring' && (
         <div className="space-y-4">
           <div className="glass-card p-5">
-            <h2 className="font-semibold mb-4">VMS Acquisition Scorecard</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold">VMS Acquisition Scorecard</h2>
+              <button
+                onClick={async () => {
+                  try {
+                    const { isAIConfigured, assessRisks } = await import('@/lib/ai');
+                    if (!isAIConfigured()) {
+                      alert('AI not configured. Go to Settings to add an API key.');
+                      return;
+                    }
+                    const result = await assessRisks({
+                      name: target.name,
+                      vertical: target.vertical,
+                      revenue: target.revenue,
+                      arr: target.arr,
+                      recurring_revenue_pct: target.recurring_revenue_pct,
+                      customer_count: target.customer_count,
+                      employee_count: target.employee_count,
+                      description: target.description,
+                    });
+                    alert(`AI Risk Assessment:\n\n${result.overall_assessment}\n\n${result.risks.map(r => `• [${r.category}] ${r.title} (Impact: ${r.impact}, Prob: ${r.probability})`).join('\n')}`);
+                  } catch (err) {
+                    alert(`AI analysis failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                  }
+                }}
+                className="btn btn-secondary btn-sm"
+              >
+                AI Risk Assessment
+              </button>
+            </div>
 
             {/* Radar Chart */}
             {target.score && (
@@ -1229,6 +1258,14 @@ function DealRoomPanel({ targetId, terms, activities, onReload }: { targetId: st
         </div>
       )}
 
+      {/* Qualification Checklist */}
+      <div className="glass-card p-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--accent)' }}>
+          Deal Qualification Checklist
+        </h3>
+        <QualificationChecklist targetId={targetId} />
+      </div>
+
       {/* Recent activity */}
       {activities.length > 0 && (
         <div className="glass-card p-4">
@@ -1370,6 +1407,76 @@ function MeetingNoteCard({ note, onDelete }: { note: MeetingNote; onDelete: () =
           {note.raw_text}
         </pre>
       )}
+    </div>
+  );
+}
+
+// === QUALIFICATION CHECKLIST ===
+const QUALIFICATION_ITEMS = [
+  { key: 'recurring_revenue', label: 'Recurring revenue > 70%', category: 'Financial' },
+  { key: 'gross_margin', label: 'Gross margin > 65%', category: 'Financial' },
+  { key: 'customer_diversification', label: 'No single customer > 15% revenue', category: 'Customer' },
+  { key: 'customer_count', label: 'Minimum viable customer base (50+)', category: 'Customer' },
+  { key: 'mission_critical', label: 'Product is mission-critical to customers', category: 'Product' },
+  { key: 'switching_costs', label: 'High switching costs / sticky product', category: 'Product' },
+  { key: 'founder_willing', label: 'Founder/owner willing to transact', category: 'Deal' },
+  { key: 'valuation_reasonable', label: 'Valuation expectations reasonable', category: 'Deal' },
+  { key: 'no_major_legal', label: 'No major legal/regulatory concerns', category: 'Risk' },
+  { key: 'key_person_plan', label: 'Key person retention plan feasible', category: 'Risk' },
+  { key: 'tech_sustainable', label: 'Technology sustainable (not obsolete)', category: 'Technology' },
+  { key: 'market_position', label: 'Defensible market position in niche', category: 'Market' },
+];
+
+function QualificationChecklist({ targetId }: { targetId: string }) {
+  const storageKey = `dealforge_qual_${targetId}`;
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const raw = localStorage.getItem(storageKey);
+    if (raw) setChecked(JSON.parse(raw));
+  }, [storageKey]);
+
+  const toggle = (key: string) => {
+    const next = { ...checked, [key]: !checked[key] };
+    setChecked(next);
+    localStorage.setItem(storageKey, JSON.stringify(next));
+  };
+
+  const totalChecked = Object.values(checked).filter(Boolean).length;
+  const pct = Math.round((totalChecked / QUALIFICATION_ITEMS.length) * 100);
+  const categories = Array.from(new Set(QUALIFICATION_ITEMS.map(i => i.category)));
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-mono" style={{ color: totalChecked === QUALIFICATION_ITEMS.length ? 'var(--success)' : 'var(--muted-foreground)' }}>
+          {totalChecked}/{QUALIFICATION_ITEMS.length} ({pct}%)
+        </span>
+        <div className="flex-1 mx-3 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--background)' }}>
+          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)' }} />
+        </div>
+        <span className="text-xs" style={{ color: pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)' }}>
+          {pct >= 80 ? 'Strong' : pct >= 50 ? 'Moderate' : 'Weak'}
+        </span>
+      </div>
+      {categories.map(cat => (
+        <div key={cat}>
+          <div className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--muted)' }}>{cat}</div>
+          {QUALIFICATION_ITEMS.filter(i => i.category === cat).map(item => (
+            <label key={item.key} className="flex items-center gap-2 py-1 cursor-pointer text-xs">
+              <input
+                type="checkbox"
+                checked={!!checked[item.key]}
+                onChange={() => toggle(item.key)}
+                className="rounded"
+              />
+              <span style={{ color: checked[item.key] ? 'var(--success)' : 'var(--muted-foreground)', textDecoration: checked[item.key] ? 'line-through' : 'none' }}>
+                {item.label}
+              </span>
+            </label>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
