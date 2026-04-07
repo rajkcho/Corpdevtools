@@ -6,7 +6,7 @@ import {
   ArrowLeft, Edit2, Trash2, Plus, Phone, Mail, Video,
   MessageSquare, Calendar, Upload, FileText, Link2,
   Users, ExternalLink, MapPin, Building2, ChevronDown, ChevronUp,
-  Download, Import,
+  Download, Import, Printer,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -129,6 +129,18 @@ export default function TargetDetailPage() {
               View DD Project
             </Link>
           )}
+          <button
+            onClick={async () => {
+              const { generateTargetOnePager } = await import('@/lib/target-export');
+              const html = generateTargetOnePager(id);
+              const w = window.open('', '_blank');
+              if (w) { w.document.write(html); w.document.close(); }
+            }}
+            className="btn btn-secondary btn-sm"
+            title="Print one-pager"
+          >
+            <Printer size={14} />
+          </button>
           <button onClick={() => setShowEditModal(true)} className="btn btn-secondary btn-sm">
             <Edit2 size={14} /> Edit
           </button>

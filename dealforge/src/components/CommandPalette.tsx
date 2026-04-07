@@ -3,12 +3,13 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Target, FileSearch, BarChart3, ArrowUpDown, Settings, LayoutDashboard, Clock, Mail, Keyboard } from 'lucide-react';
-import { getTargets, getDDProjects } from '@/lib/db';
-import type { Target as TargetType, DDProject } from '@/lib/types';
+import { getTargets, getDDProjects, getContacts, getTouchpoints } from '@/lib/db';
+import type { Target as TargetType, DDProject, Contact, Touchpoint } from '@/lib/types';
+import { Users, MessageSquare } from 'lucide-react';
 
 interface SearchResult {
   id: string;
-  type: 'target' | 'dd_project' | 'page';
+  type: 'target' | 'dd_project' | 'page' | 'contact' | 'touchpoint';
   label: string;
   sublabel?: string;
   href: string;
@@ -154,6 +155,40 @@ export default function CommandPalette() {
           });
         }
       }
+
+      // Search contacts (only when query has 2+ chars)
+      if (q.length >= 2) {
+        const contacts = getContacts();
+        for (const c of contacts) {
+          if (c.name.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q) || c.title?.toLowerCase().includes(q)) {
+            const target = targets.find(t => t.id === c.target_id);
+            allResults.push({
+              id: c.id,
+              type: 'contact',
+              label: c.name,
+              sublabel: `${c.title || 'Contact'} · ${target?.name || 'Unknown'}`,
+              href: `/targets/${c.target_id}`,
+              icon: <Users size={16} />,
+            });
+          }
+        }
+
+        // Search touchpoints
+        const tps = getTouchpoints();
+        for (const tp of tps.slice(0, 100)) {
+          if (tp.subject.toLowerCase().includes(q) || tp.summary?.toLowerCase().includes(q)) {
+            const target = targets.find(t => t.id === tp.target_id);
+            allResults.push({
+              id: tp.id,
+              type: 'touchpoint',
+              label: tp.subject,
+              sublabel: `${tp.type} · ${target?.name || 'Unknown'} · ${new Date(tp.date).toLocaleDateString()}`,
+              href: `/targets/${tp.target_id}`,
+              icon: <MessageSquare size={16} />,
+            });
+          }
+        }
+      }
     }
 
     setResults(allResults.slice(0, 15));
@@ -258,7 +293,7 @@ export default function CommandPalette() {
                   )}
                 </div>
                 <span className="text-xs capitalize" style={{ color: 'var(--muted)' }}>
-                  {result.type === 'dd_project' ? 'DD Project' : result.type}
+                  {result.type === 'dd_project' ? 'DD' : result.type === 'touchpoint' ? 'Activity' : result.type}
                 </span>
               </button>
             ))
