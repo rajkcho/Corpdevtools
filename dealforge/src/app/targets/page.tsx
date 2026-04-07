@@ -15,12 +15,18 @@ export default function TargetsPage() {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'updated_at' | 'weighted_score' | 'revenue'>('updated_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [filterStage, setFilterStage] = useState<string>('all');
+  const [filterVertical, setFilterVertical] = useState<string>('all');
 
   const reload = useCallback(() => setTargets(getTargets()), []);
   useEffect(() => { reload(); }, [reload]);
 
+  const verticals = Array.from(new Set(targets.map(t => t.vertical))).sort();
+
   const filtered = targets
     .filter(t => {
+      if (filterStage !== 'all' && t.stage !== filterStage) return false;
+      if (filterVertical !== 'all' && t.vertical !== filterVertical) return false;
       if (!search) return true;
       const q = search.toLowerCase();
       return t.name.toLowerCase().includes(q) || t.vertical.toLowerCase().includes(q) || t.geography.toLowerCase().includes(q);
@@ -78,6 +84,14 @@ export default function TargetsPage() {
           <option value="name">Name</option>
           <option value="weighted_score">Score</option>
           <option value="revenue">Revenue</option>
+        </select>
+        <select value={filterStage} onChange={e => setFilterStage(e.target.value)} className="text-sm">
+          <option value="all">All Stages</option>
+          {DEAL_STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+        </select>
+        <select value={filterVertical} onChange={e => setFilterVertical(e.target.value)} className="text-sm">
+          <option value="all">All Verticals</option>
+          {verticals.map(v => <option key={v} value={v}>{v}</option>)}
         </select>
         <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')} className="btn btn-secondary btn-sm">
           {sortDir === 'desc' ? 'Desc' : 'Asc'}

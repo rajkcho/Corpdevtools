@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { FileSearch, Plus } from 'lucide-react';
 import Link from 'next/link';
-import { getDDProjects, getTargets, createDDProject, populateDDTemplates } from '@/lib/db';
+import { getDDProjects, getTargets, createDDProject, populateDDTemplates, getDDRisks, getDDFindings, getInfoRequests } from '@/lib/db';
 import { countTemplateTasks } from '@/lib/dd-templates';
 import type { DDProject, Target } from '@/lib/types';
 import RAGDot from '@/components/RAGDot';
@@ -136,6 +136,14 @@ export default function DiligencePage() {
 }
 
 function DDProjectCard({ project }: { project: DDProject }) {
+  const risks = getDDRisks(project.id);
+  const findings = getDDFindings(project.id);
+  const irls = getInfoRequests(project.id);
+  const openRisks = risks.filter(r => r.status === 'open' || r.status === 'mitigating').length;
+  const criticalRisks = risks.filter(r => (r.risk_score || 0) >= 15 && r.status !== 'closed').length;
+  const openFindings = findings.filter(f => f.status === 'open').length;
+  const pendingIrls = irls.filter(ir => ir.status !== 'complete').length;
+
   return (
     <Link href={`/diligence/${project.id}`} className="glass-card p-4 block hover:border-opacity-80 transition-all">
       <div className="flex items-center justify-between mb-2">
@@ -154,6 +162,17 @@ function DDProjectCard({ project }: { project: DDProject }) {
       <div className="flex items-center gap-4 mt-2 text-xs" style={{ color: 'var(--muted)' }}>
         <span>Started: {new Date(project.start_date).toLocaleDateString()}</span>
         {project.target_close_date && <span>Target close: {new Date(project.target_close_date).toLocaleDateString()}</span>}
+        {openRisks > 0 && (
+          <span style={{ color: criticalRisks > 0 ? 'var(--danger)' : 'var(--warning)' }}>
+            {openRisks} risk{openRisks !== 1 ? 's' : ''}{criticalRisks > 0 ? ` (${criticalRisks} critical)` : ''}
+          </span>
+        )}
+        {openFindings > 0 && (
+          <span style={{ color: 'var(--warning)' }}>{openFindings} finding{openFindings !== 1 ? 's' : ''}</span>
+        )}
+        {pendingIrls > 0 && (
+          <span style={{ color: 'var(--accent)' }}>{pendingIrls} IRL{pendingIrls !== 1 ? 's' : ''} pending</span>
+        )}
       </div>
     </Link>
   );

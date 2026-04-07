@@ -6,7 +6,8 @@ import {
   Clock, TrendingUp, Calendar, BarChart3,
 } from 'lucide-react';
 import Link from 'next/link';
-import { getTargets, getDDProjects, getDDRisks, getTouchpoints, getDDFindings, getInfoRequests } from '@/lib/db';
+import { getTargets, getDDProjects, getDDRisks, getTouchpoints, getDDFindings, getInfoRequests, getActivities } from '@/lib/db';
+import type { ActivityEntry } from '@/lib/types';
 import { DEAL_STAGES, VERTICALS } from '@/lib/types';
 import type { Target as TargetType, DDProject, DDRisk, Touchpoint } from '@/lib/types';
 import RAGDot from '@/components/RAGDot';
@@ -18,6 +19,7 @@ export default function DashboardPage() {
   const [risks, setRisks] = useState<DDRisk[]>([]);
   const [touchpoints, setTouchpoints] = useState<Touchpoint[]>([]);
   const [allTargets, setAllTargets] = useState<TargetType[]>([]);
+  const [recentActivities, setRecentActivities] = useState<ActivityEntry[]>([]);
 
   useEffect(() => {
     const t = getTargets();
@@ -26,6 +28,7 @@ export default function DashboardPage() {
     setDDProjects(getDDProjects());
     setRisks(getDDRisks());
     setTouchpoints(getTouchpoints());
+    setRecentActivities(getActivities(15));
   }, []);
 
   const activeTargets = targets.filter(t => !['closed_won', 'closed_lost'].includes(t.stage));
@@ -286,25 +289,50 @@ export default function DashboardPage() {
 
       {/* Recent Activity */}
       <div className="glass-card p-5">
-        <h2 className="font-semibold mb-4">Recent Activity</h2>
-        {recentTouchpoints.length === 0 ? (
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold">Recent Activity</h2>
+          <Link href="/activity" className="text-xs font-medium" style={{ color: 'var(--accent)' }}>View All</Link>
+        </div>
+        {recentActivities.length === 0 && recentTouchpoints.length === 0 ? (
           <p className="text-sm text-center py-6" style={{ color: 'var(--muted)' }}>
             No recent activity. Start by adding targets and logging touchpoints.
           </p>
         ) : (
           <div className="space-y-1.5">
-            {recentTouchpoints.map((tp) => (
-              <div key={tp.id} className="flex items-center gap-3 p-2 rounded-lg text-sm" style={{ background: 'var(--background)' }}>
-                <span className="badge capitalize" style={{ background: 'var(--accent-muted)', color: 'var(--accent)', minWidth: 65, textAlign: 'center' }}>
-                  {tp.type}
-                </span>
-                <span className="font-medium">{tp.target_name}</span>
-                <span className="flex-1 truncate" style={{ color: 'var(--muted-foreground)' }}>{tp.subject}</span>
-                <span className="text-xs flex-shrink-0" style={{ color: 'var(--muted)' }}>
-                  {new Date(tp.date).toLocaleDateString()}
-                </span>
-              </div>
-            ))}
+            {recentActivities.length > 0 ? (
+              recentActivities.map((a) => (
+                <div key={a.id} className="flex items-center gap-3 p-2 rounded-lg text-sm" style={{ background: 'var(--background)' }}>
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{
+                    background: a.type.includes('created') || a.type.includes('added') ? 'var(--success)'
+                      : a.type.includes('deleted') ? 'var(--danger)'
+                      : a.type.includes('changed') || a.type.includes('updated') ? 'var(--warning)'
+                      : 'var(--accent)',
+                  }} />
+                  <span className="flex-1 truncate">{a.description}</span>
+                  {a.target_name && (
+                    <Link href={`/targets/${a.target_id}`} className="text-xs font-medium flex-shrink-0" style={{ color: 'var(--accent)' }}>
+                      {a.target_name}
+                    </Link>
+                  )}
+                  <span className="text-xs flex-shrink-0" style={{ color: 'var(--muted)' }}>
+                    {new Date(a.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+              ))
+            ) : (
+              recentTouchpoints.map((tp) => (
+                <div key={tp.id} className="flex items-center gap-3 p-2 rounded-lg text-sm" style={{ background: 'var(--background)' }}>
+                  <span className="badge capitalize" style={{ background: 'var(--accent-muted)', color: 'var(--accent)', minWidth: 65, textAlign: 'center' }}>
+                    {tp.type}
+                  </span>
+                  <span className="font-medium">{tp.target_name}</span>
+                  <span className="flex-1 truncate" style={{ color: 'var(--muted-foreground)' }}>{tp.subject}</span>
+                  <span className="text-xs flex-shrink-0" style={{ color: 'var(--muted)' }}>
+                    {new Date(tp.date).toLocaleDateString()}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>
