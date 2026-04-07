@@ -321,6 +321,58 @@ export default function PortfolioPage() {
             </table>
           </div>
 
+          {/* Pipeline Conversion Funnel */}
+          {allTargets.length > 3 && (
+            <div className="glass-card p-5">
+              <h2 className="font-semibold mb-3 flex items-center gap-2">
+                <TrendingUp size={16} style={{ color: 'var(--accent)' }} /> Pipeline Conversion Funnel
+              </h2>
+              <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>
+                Percentage of targets that have reached or passed each stage
+              </p>
+              <div className="space-y-2">
+                {(() => {
+                  const stageOrder = ['identified', 'researching', 'contacted', 'nurturing', 'loi_submitted', 'loi_signed', 'due_diligence', 'closing', 'closed_won'];
+                  const total = allTargets.length;
+                  return stageOrder.map((stageKey, idx) => {
+                    // Count targets that have reached this stage or beyond
+                    const reachedCount = allTargets.filter(t => {
+                      const tIdx = stageOrder.indexOf(t.stage);
+                      return tIdx >= idx || t.stage === 'closed_lost';
+                    }).length;
+                    // For funnel: targets at or beyond this stage (excluding closed_lost)
+                    const atOrBeyond = allTargets.filter(t => stageOrder.indexOf(t.stage) >= idx).length;
+                    const pct = total > 0 ? Math.round((atOrBeyond / total) * 100) : 0;
+                    const stage = DEAL_STAGES.find(s => s.key === stageKey);
+                    return (
+                      <div key={stageKey} className="flex items-center gap-3">
+                        <span className="text-xs w-28 truncate" style={{ color: stage?.color }}>{stage?.label}</span>
+                        <div className="flex-1 h-5 rounded" style={{ background: 'var(--background)' }}>
+                          <div
+                            className="h-full rounded flex items-center px-2 text-[10px] font-bold text-white transition-all"
+                            style={{ width: `${Math.max(pct, 6)}%`, background: stage?.color }}
+                          >
+                            {pct > 10 ? `${pct}%` : ''}
+                          </div>
+                        </div>
+                        <span className="text-xs font-mono w-16 text-right" style={{ color: 'var(--muted)' }}>{atOrBeyond}/{total}</span>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+              {closedWon.length > 0 && allTargets.length > 0 && (
+                <div className="mt-3 p-2 rounded-lg text-xs" style={{ background: 'var(--background)' }}>
+                  <span className="font-medium">Overall conversion:</span>{' '}
+                  <span className="font-mono font-bold" style={{ color: 'var(--success)' }}>
+                    {Math.round((closedWon.length / allTargets.length) * 100)}%
+                  </span>{' '}
+                  <span style={{ color: 'var(--muted)' }}>({closedWon.length} won out of {allTargets.length} total targets)</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Lost Deals Analysis */}
           {closedLost.length > 0 && (
             <div className="glass-card p-5">

@@ -354,6 +354,63 @@ export default function ValuationPage() {
             </table>
           </div>
 
+          {/* Sensitivity Analysis */}
+          <div className="glass-card p-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-2" style={{ color: 'var(--accent)' }}>
+              <BarChart3 size={14} /> Sensitivity Analysis — Blended EV
+            </h3>
+            <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>
+              How blended enterprise value changes with growth rate (rows) and EBITA margin (columns)
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <th className="p-1.5 text-left" style={{ color: 'var(--muted)', minWidth: 80 }}>Growth \ Margin</th>
+                    {[-5, 0, 5, 10, 15].map(delta => {
+                      const margin = inputs.ebitaMarginPct + delta;
+                      const isCurrent = delta === 0;
+                      return (
+                        <th key={delta} className="p-1.5 text-right font-mono" style={{ color: isCurrent ? 'var(--accent)' : 'var(--muted-foreground)', fontWeight: isCurrent ? 700 : 400 }}>
+                          {margin}%
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[-5, -2, 0, 2, 5, 10].map(growthDelta => {
+                    const growth = inputs.yoyGrowthPct + growthDelta;
+                    const isCurrentGrowth = growthDelta === 0;
+                    return (
+                      <tr key={growthDelta} style={{ borderBottom: '1px solid var(--border)', background: isCurrentGrowth ? 'var(--accent-muted)' : undefined }}>
+                        <td className="p-1.5 font-mono" style={{ color: isCurrentGrowth ? 'var(--accent)' : 'var(--muted-foreground)', fontWeight: isCurrentGrowth ? 700 : 400 }}>
+                          {growth}% growth
+                        </td>
+                        {[-5, 0, 5, 10, 15].map(marginDelta => {
+                          const margin = inputs.ebitaMarginPct + marginDelta;
+                          const isCurrent = growthDelta === 0 && marginDelta === 0;
+                          const sensInputs = { ...inputs, yoyGrowthPct: growth, ebitaMarginPct: margin };
+                          const sensScenarios = calculateScenarios(sensInputs);
+                          const ev = sensScenarios[1].blended;
+                          return (
+                            <td key={marginDelta} className="p-1.5 text-right font-mono" style={{
+                              color: isCurrent ? 'var(--accent)' : 'var(--foreground)',
+                              fontWeight: isCurrent ? 700 : 400,
+                              background: isCurrent ? 'rgba(59,130,246,0.1)' : undefined,
+                            }}>
+                              {fmt(ev)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {/* IRR / Payback */}
           <div className="glass-card p-5">
             <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--accent)' }}>
