@@ -805,6 +805,35 @@ export function exportTargetsCSV(): string {
   return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
 }
 
+export function importTargetsFromCSV(csv: string): number {
+  const lines = csv.trim().split('\n');
+  if (lines.length < 2) return 0;
+
+  let imported = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    const fields = line.match(/("(?:[^"]*(?:""[^"]*)*)"|[^,]*)/g)?.map(f => f.replace(/^"|"$/g, '').replace(/""/g, '"')) || [];
+    if (fields.length >= 1 && fields[0].trim()) {
+      createTarget({
+        name: fields[0].trim(),
+        vertical: (fields[1]?.trim() as any) || 'Other',
+        geography: fields[2]?.trim() || '',
+        stage: (fields[3]?.trim() as any) || 'identified',
+        source: (fields[4]?.trim() as any) || 'proprietary',
+        revenue: fields[5] ? parseFloat(fields[5]) || undefined : undefined,
+        arr: fields[6] ? parseFloat(fields[6]) || undefined : undefined,
+        recurring_revenue_pct: fields[7] ? parseFloat(fields[7]) || undefined : undefined,
+        gross_margin_pct: fields[8] ? parseFloat(fields[8]) || undefined : undefined,
+        ebita: fields[9] ? parseFloat(fields[9]) || undefined : undefined,
+        customer_count: fields[10] ? parseInt(fields[10]) || undefined : undefined,
+      });
+      imported++;
+    }
+  }
+  return imported;
+}
+
 export function exportContactsCSV(): string {
   const contacts = getContacts();
   const targets = getTargets();

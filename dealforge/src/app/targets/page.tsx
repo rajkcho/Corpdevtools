@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, Download } from 'lucide-react';
+import { Plus, Search, Download, Upload } from 'lucide-react';
 import Link from 'next/link';
-import { getTargets, createTarget, exportTargetsCSV } from '@/lib/db';
+import { getTargets, createTarget, exportTargetsCSV, importTargetsFromCSV } from '@/lib/db';
 import { DEAL_STAGES, VERTICALS } from '@/lib/types';
 import type { Target } from '@/lib/types';
 import Modal from '@/components/Modal';
@@ -60,6 +60,26 @@ export default function TargetsPage() {
           <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>{targets.length} companies tracked</p>
         </div>
         <div className="flex gap-2">
+          <label className="btn btn-secondary btn-sm cursor-pointer">
+            <Upload size={14} /> Import CSV
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = ev => {
+                  const count = importTargetsFromCSV(ev.target?.result as string);
+                  alert(`Imported ${count} target(s).`);
+                  reload();
+                };
+                reader.readAsText(file);
+                e.target.value = '';
+              }}
+            />
+          </label>
           <button onClick={handleExport} className="btn btn-secondary btn-sm">
             <Download size={14} /> Export CSV
           </button>

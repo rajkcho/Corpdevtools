@@ -215,6 +215,69 @@ export default function DDProjectDetailPage() {
         </div>
       </div>
 
+      {/* Executive Summary */}
+      <details className="glass-card">
+        <summary className="p-4 cursor-pointer text-sm font-medium flex items-center gap-2" style={{ color: 'var(--muted-foreground)' }}>
+          <FileText size={14} /> Executive Summary
+        </summary>
+        <div className="px-4 pb-4 space-y-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>Open Risks</div>
+              <div className="text-xl font-bold" style={{ color: risks.filter(r => (r.risk_score || 0) >= 15 && r.status !== 'closed').length > 0 ? 'var(--danger)' : 'var(--foreground)' }}>
+                {risks.filter(r => r.status === 'open' || r.status === 'mitigating').length}
+              </div>
+              {risks.filter(r => (r.risk_score || 0) >= 15 && r.status !== 'closed').length > 0 && (
+                <div className="text-xs" style={{ color: 'var(--danger)' }}>{risks.filter(r => (r.risk_score || 0) >= 15 && r.status !== 'closed').length} critical</div>
+              )}
+            </div>
+            <div className="p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>Open Findings</div>
+              <div className="text-xl font-bold">{findings.filter(f => f.status === 'open').length}</div>
+              {findings.filter(f => f.severity === 'critical' || f.severity === 'high').length > 0 && (
+                <div className="text-xs" style={{ color: 'var(--warning)' }}>{findings.filter(f => (f.severity === 'critical' || f.severity === 'high') && f.status === 'open').length} high/critical</div>
+              )}
+            </div>
+            <div className="p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>IRL Completion</div>
+              <div className="text-xl font-bold">
+                {requests.length > 0 ? Math.round((requests.filter(r => r.status === 'complete').length / requests.length) * 100) : 0}%
+              </div>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>{requests.filter(r => r.status === 'complete').length}/{requests.length} complete</div>
+            </div>
+            <div className="p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>Documents</div>
+              <div className="text-xl font-bold">{documents.length}</div>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>uploaded</div>
+            </div>
+          </div>
+          {/* Top risks list */}
+          {risks.filter(r => r.status !== 'closed').sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0)).slice(0, 3).length > 0 && (
+            <div>
+              <div className="text-xs font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>Top Risks</div>
+              {risks.filter(r => r.status !== 'closed').sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0)).slice(0, 3).map(r => (
+                <div key={r.id} className="flex items-center gap-2 text-xs py-1">
+                  <span className="font-mono font-bold w-6 text-center" style={{
+                    color: (r.risk_score || 0) >= 15 ? 'var(--danger)' : (r.risk_score || 0) >= 8 ? 'var(--warning)' : 'var(--accent)',
+                  }}>{r.risk_score}</span>
+                  <span>{r.title}</span>
+                  <span className="ml-auto capitalize badge" style={{ background: 'var(--background)' }}>{r.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Blocked workstreams */}
+          {workstreams.filter(ws => ws.rag_status === 'red').length > 0 && (
+            <div>
+              <div className="text-xs font-medium mb-1" style={{ color: 'var(--danger)' }}>Blocked Workstreams</div>
+              {workstreams.filter(ws => ws.rag_status === 'red').map(ws => (
+                <div key={ws.id} className="text-xs py-0.5">{ws.label} ({ws.progress_pct}%)</div>
+              ))}
+            </div>
+          )}
+        </div>
+      </details>
+
       {/* Tabs */}
       <div className="flex gap-1 p-1 rounded-lg w-fit" style={{ background: 'var(--card)' }}>
         {([
