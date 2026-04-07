@@ -1317,9 +1317,19 @@ function TouchpointForm({ onSubmit, onCancel }: { onSubmit: (data: Partial<Touch
     follow_up_date: '',
     follow_up_notes: '',
   });
+  const [sentiment, setSentiment] = useState<'positive' | 'neutral' | 'negative' | ''>('');
+  const [outcome, setOutcome] = useState('');
 
   return (
-    <form onSubmit={e => { e.preventDefault(); onSubmit(form); }} className="space-y-3">
+    <form onSubmit={e => {
+      e.preventDefault();
+      const summaryWithMeta = [
+        form.summary,
+        sentiment ? `\n[Sentiment: ${sentiment}]` : '',
+        outcome ? `\n[Outcome: ${outcome}]` : '',
+      ].filter(Boolean).join('');
+      onSubmit({ ...form, summary: summaryWithMeta });
+    }} className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Type</label>
@@ -1345,6 +1355,48 @@ function TouchpointForm({ onSubmit, onCancel }: { onSubmit: (data: Partial<Touch
       <div>
         <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Summary</label>
         <textarea value={form.summary} onChange={e => setForm(f => ({ ...f, summary: e.target.value }))} rows={4} className="w-full" placeholder="Key takeaways from the interaction..." />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Sentiment</label>
+          <div className="flex gap-2">
+            {([
+              { value: 'positive' as const, label: '👍 Positive', color: 'var(--success)' },
+              { value: 'neutral' as const, label: '😐 Neutral', color: 'var(--muted-foreground)' },
+              { value: 'negative' as const, label: '👎 Negative', color: 'var(--danger)' },
+            ]).map(s => (
+              <button
+                key={s.value}
+                type="button"
+                onClick={() => setSentiment(sentiment === s.value ? '' : s.value)}
+                className="flex-1 py-1.5 rounded text-xs font-medium transition-colors"
+                style={{
+                  background: sentiment === s.value ? `${s.color}15` : 'var(--background)',
+                  color: sentiment === s.value ? s.color : 'var(--muted)',
+                  border: `1px solid ${sentiment === s.value ? s.color : 'var(--border)'}`,
+                }}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Outcome</label>
+          <select value={outcome} onChange={e => setOutcome(e.target.value)} className="w-full text-sm">
+            <option value="">Select outcome...</option>
+            <option value="scheduled_next_meeting">Scheduled next meeting</option>
+            <option value="requested_info">Requested information</option>
+            <option value="sent_materials">Sent materials</option>
+            <option value="verbal_interest">Verbal interest expressed</option>
+            <option value="no_interest">No interest</option>
+            <option value="need_time">Need more time</option>
+            <option value="introduced_to_decision_maker">Introduced to decision maker</option>
+            <option value="pricing_discussed">Pricing discussed</option>
+            <option value="terms_negotiated">Terms negotiated</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
       </div>
       <div>
         <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Participants</label>
