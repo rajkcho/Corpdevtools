@@ -10,6 +10,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  BarChart3,
+  ArrowUpDown,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -17,6 +19,8 @@ const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
   { href: '/targets', label: 'Targets', icon: Target },
+  { href: '/compare', label: 'Compare', icon: ArrowUpDown },
+  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/diligence', label: 'Due Diligence', icon: FileSearch },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];

@@ -6,7 +6,7 @@ import {
   ArrowLeft, Plus, Trash2, ChevronDown, ChevronRight, AlertTriangle,
   FileText, CheckCircle2, Circle, Clock, Ban, Upload, Send, Eye,
   TrendingUp, DollarSign, Code, Scale, UserCheck, Settings,
-  Users, BookOpen,
+  Users, BookOpen, Download, Edit2,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -28,6 +28,7 @@ import type {
 import Modal from '@/components/Modal';
 import RAGDot from '@/components/RAGDot';
 import ProgressBar from '@/components/ProgressBar';
+import { generateDDReport } from '@/lib/dd-report';
 
 const WS_ICONS: Record<string, React.ReactNode> = {
   commercial: <TrendingUp size={16} />,
@@ -119,6 +120,21 @@ export default function DDProjectDetailPage() {
             <option value="complete">Complete</option>
           </select>
           <button onClick={handleRecalc} className="btn btn-secondary btn-sm">Recalculate</button>
+          <button
+            onClick={() => {
+              const report = generateDDReport(id);
+              const blob = new Blob([report], { type: 'text/plain' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `dd-report-${project.target_name.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.txt`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="btn btn-secondary btn-sm"
+          >
+            <Download size={14} /> Export Report
+          </button>
         </div>
       </div>
 
@@ -339,6 +355,30 @@ function WorkstreamSection({ workstream, expanded, onToggle, onReload }: {
 
       {expanded && (
         <div className="border-t px-4 pb-4 pt-3" style={{ borderColor: 'var(--border)' }}>
+          {/* Workstream owner & notes */}
+          <div className="flex items-center gap-3 mb-3 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
+            <div className="flex items-center gap-2 flex-1">
+              <label className="text-xs" style={{ color: 'var(--muted)' }}>Owner:</label>
+              <input
+                value={workstream.owner || ''}
+                onChange={e => { updateDDWorkstream(workstream.id, { owner: e.target.value }); onReload(); }}
+                placeholder="Assign owner..."
+                className="flex-1 text-xs"
+                style={{ padding: '0.25rem 0.5rem' }}
+              />
+            </div>
+            <div className="flex items-center gap-2 flex-1">
+              <label className="text-xs" style={{ color: 'var(--muted)' }}>Notes:</label>
+              <input
+                value={workstream.notes || ''}
+                onChange={e => { updateDDWorkstream(workstream.id, { notes: e.target.value }); onReload(); }}
+                placeholder="Workstream notes..."
+                className="flex-1 text-xs"
+                style={{ padding: '0.25rem 0.5rem' }}
+              />
+            </div>
+          </div>
+
           {/* Hierarchical task groups */}
           <div className="space-y-3">
             {parentTasks.map(parent => {
@@ -937,12 +977,50 @@ function IRLPanel({ projectId, requests, workstreams, onReload }: { projectId: s
 function DocumentsPanel({ projectId, documents, workstreams, onReload }: { projectId: string; documents: DDDocument[]; workstreams: DDWorkstream[]; onReload: () => void }) {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ file_name: '', category: 'other' as DDDocument['category'], workstream_key: '', notes: '' });
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; type: string; data: string; size: number } | null>(null);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Limit to 5MB for localStorage
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File too large. Maximum size is 5MB for local storage.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const data = ev.target?.result as string;
+      setUploadedFile({ name: file.name, type: file.type, data, size: file.size });
+      if (!form.file_name) {
+        setForm(f => ({ ...f, file_name: file.name }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleAdd = () => {
-    createDDDocument({ project_id: projectId, ...form, file_type: 'manual', file_url: '', workstream_key: form.workstream_key as DDWorkstreamKey || undefined });
+    createDDDocument({
+      project_id: projectId,
+      file_name: form.file_name,
+      file_type: uploadedFile?.type || 'manual',
+      file_url: uploadedFile?.data || '',
+      file_size: uploadedFile?.size,
+      category: form.category,
+      workstream_key: form.workstream_key as DDWorkstreamKey || undefined,
+      notes: form.notes,
+    });
     setForm({ file_name: '', category: 'other', workstream_key: '', notes: '' });
+    setUploadedFile(null);
     setShowAdd(false);
     onReload();
+  };
+
+  const handleDownload = (doc: DDDocument) => {
+    if (!doc.file_url || !doc.file_url.startsWith('data:')) return;
+    const a = document.createElement('a');
+    a.href = doc.file_url;
+    a.download = doc.file_name;
+    a.click();
   };
 
   const categoryLabels: Record<string, string> = {
@@ -950,14 +1028,25 @@ function DocumentsPanel({ projectId, documents, workstreams, onReload }: { proje
     org_chart: 'Org Chart', technical: 'Technical', legal: 'Legal', tax: 'Tax', other: 'Other',
   };
 
+  const formatSize = (bytes?: number) => {
+    if (!bytes) return '';
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${bytes} B`;
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">Document Vault</h2>
-        <button onClick={() => setShowAdd(true)} className="btn btn-primary btn-sm"><Plus size={14} /> Add Document</button>
+        <button onClick={() => setShowAdd(true)} className="btn btn-primary btn-sm"><Upload size={14} /> Upload Document</button>
       </div>
       {documents.length === 0 ? (
-        <div className="glass-card p-8 text-center" style={{ color: 'var(--muted)' }}>No documents uploaded yet.</div>
+        <div className="glass-card p-8 text-center" style={{ color: 'var(--muted)' }}>
+          <Upload size={32} className="mx-auto mb-2 opacity-50" />
+          <p>No documents uploaded yet.</p>
+          <p className="text-xs mt-1">Upload files up to 5MB. Files are stored locally in your browser.</p>
+        </div>
       ) : (
         <div className="space-y-2">
           {documents.map(d => (
@@ -972,9 +1061,16 @@ function DocumentsPanel({ projectId, documents, workstreams, onReload }: { proje
                       {DD_WORKSTREAMS.find(w => w.key === d.workstream_key)?.label}
                     </span>
                   )}
+                  {d.file_size && <span className="text-xs" style={{ color: 'var(--muted)' }}>{formatSize(d.file_size)}</span>}
                 </div>
+                {d.notes && <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>{d.notes}</p>}
               </div>
               <span className="text-xs" style={{ color: 'var(--muted)' }}>{new Date(d.uploaded_at).toLocaleDateString()}</span>
+              {d.file_url && d.file_url.startsWith('data:') && (
+                <button onClick={() => handleDownload(d)} className="btn btn-ghost btn-sm" title="Download">
+                  <Download size={14} style={{ color: 'var(--accent)' }} />
+                </button>
+              )}
               <button onClick={() => { deleteDDDocument(d.id); onReload(); }} className="btn btn-ghost btn-sm">
                 <Trash2 size={14} style={{ color: 'var(--danger)' }} />
               </button>
@@ -983,8 +1079,26 @@ function DocumentsPanel({ projectId, documents, workstreams, onReload }: { proje
         </div>
       )}
 
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Document">
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Upload Document">
         <div className="space-y-3">
+          {/* File upload area */}
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>File (max 5MB)</label>
+            <div className="border-2 border-dashed rounded-lg p-4 text-center" style={{ borderColor: uploadedFile ? 'var(--success)' : 'var(--border)' }}>
+              {uploadedFile ? (
+                <div className="text-sm">
+                  <span style={{ color: 'var(--success)' }}>{uploadedFile.name}</span>
+                  <span className="text-xs ml-2" style={{ color: 'var(--muted)' }}>({formatSize(uploadedFile.size)})</span>
+                </div>
+              ) : (
+                <label className="cursor-pointer">
+                  <Upload size={24} className="mx-auto mb-1" style={{ color: 'var(--muted)' }} />
+                  <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Click to select a file</p>
+                  <input type="file" onChange={handleFileUpload} className="hidden" />
+                </label>
+              )}
+            </div>
+          </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Document Name *</label>
             <input value={form.file_name} onChange={e => setForm(f => ({ ...f, file_name: e.target.value }))} className="w-full" placeholder="e.g. 2024 Audited Financial Statements" />
@@ -1009,8 +1123,10 @@ function DocumentsPanel({ projectId, documents, workstreams, onReload }: { proje
             <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="w-full" rows={2} />
           </div>
           <div className="flex justify-end gap-2 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
-            <button onClick={() => setShowAdd(false)} className="btn btn-secondary">Cancel</button>
-            <button onClick={handleAdd} disabled={!form.file_name} className="btn btn-primary">Add Document</button>
+            <button onClick={() => { setShowAdd(false); setUploadedFile(null); }} className="btn btn-secondary">Cancel</button>
+            <button onClick={handleAdd} disabled={!form.file_name} className="btn btn-primary">
+              <Upload size={14} /> Upload
+            </button>
           </div>
         </div>
       </Modal>
