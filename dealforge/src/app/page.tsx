@@ -370,6 +370,53 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Weekly Digest */}
+      {recentActivities.length > 0 && (
+        <div className="glass-card p-5">
+          <h2 className="font-semibold mb-3 flex items-center gap-2">
+            <BarChart3 size={16} style={{ color: 'var(--accent)' }} /> This Week&apos;s Summary
+          </h2>
+          {(() => {
+            const weekAgo = Date.now() - 7 * 86400000;
+            const weekActivities = recentActivities.filter(a => new Date(a.created_at).getTime() > weekAgo);
+            const newTargets = weekActivities.filter(a => a.type === 'target_created').length;
+            const stageChanges = weekActivities.filter(a => a.type === 'stage_changed').length;
+            const touchpointsLogged = weekActivities.filter(a => a.type === 'touchpoint_added').length;
+            const ddTasks = weekActivities.filter(a => a.type === 'dd_task_completed').length;
+            const risksAdded = weekActivities.filter(a => a.type === 'dd_risk_added').length;
+
+            if (weekActivities.length === 0) {
+              return <p className="text-sm" style={{ color: 'var(--muted)' }}>No activity this week. Time to engage with your pipeline!</p>;
+            }
+
+            return (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="text-center p-2 rounded-lg" style={{ background: 'var(--background)' }}>
+                  <div className="text-lg font-bold font-mono" style={{ color: newTargets > 0 ? 'var(--success)' : 'var(--muted)' }}>{newTargets}</div>
+                  <div className="text-xs" style={{ color: 'var(--muted)' }}>New Targets</div>
+                </div>
+                <div className="text-center p-2 rounded-lg" style={{ background: 'var(--background)' }}>
+                  <div className="text-lg font-bold font-mono" style={{ color: stageChanges > 0 ? 'var(--warning)' : 'var(--muted)' }}>{stageChanges}</div>
+                  <div className="text-xs" style={{ color: 'var(--muted)' }}>Stage Changes</div>
+                </div>
+                <div className="text-center p-2 rounded-lg" style={{ background: 'var(--background)' }}>
+                  <div className="text-lg font-bold font-mono" style={{ color: touchpointsLogged > 0 ? 'var(--accent)' : 'var(--muted)' }}>{touchpointsLogged}</div>
+                  <div className="text-xs" style={{ color: 'var(--muted)' }}>Touchpoints</div>
+                </div>
+                <div className="text-center p-2 rounded-lg" style={{ background: 'var(--background)' }}>
+                  <div className="text-lg font-bold font-mono" style={{ color: ddTasks > 0 ? 'var(--success)' : 'var(--muted)' }}>{ddTasks}</div>
+                  <div className="text-xs" style={{ color: 'var(--muted)' }}>DD Tasks Done</div>
+                </div>
+                <div className="text-center p-2 rounded-lg" style={{ background: 'var(--background)' }}>
+                  <div className="text-lg font-bold font-mono" style={{ color: risksAdded > 0 ? 'var(--danger)' : 'var(--muted)' }}>{risksAdded}</div>
+                  <div className="text-xs" style={{ color: 'var(--muted)' }}>Risks Flagged</div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* Recent Activity */}
       <div className="glass-card p-5">
         <div className="flex items-center justify-between mb-4">
