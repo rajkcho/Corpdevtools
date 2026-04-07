@@ -253,7 +253,9 @@ input::placeholder, textarea::placeholder {
 
 /* Print styles */
 @media print {
-  aside, .no-print { display: none !important; }
+  aside, .no-print, .print\:hidden { display: none !important; }
   main { margin: 0 !important; padding: 0 !important; }
   .glass-card { border: 1px solid #ddd; break-inside: avoid; }
+  body { background: white !important; color: black !important; }
+  * { color-adjust: exact; -webkit-print-color-adjust: exact; }
 }

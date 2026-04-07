@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { FileSearch, Plus } from 'lucide-react';
+import { FileSearch, Plus, AlertTriangle, CheckCircle2, Clock, Shield } from 'lucide-react';
 import Link from 'next/link';
 import { getDDProjects, getTargets, createDDProject, populateDDTemplates, getDDRisks, getDDFindings, getInfoRequests, getDDWorkstreams, getDDTasks } from '@/lib/db';
 import { countTemplateTasks } from '@/lib/dd-templates';
@@ -57,6 +57,59 @@ export default function DiligencePage() {
           <Plus size={14} /> New DD Project
         </button>
       </div>
+
+      {/* DD Portfolio Summary */}
+      {projects.length > 0 && (() => {
+        const allRisks = projects.flatMap(p => getDDRisks(p.id));
+        const allFindings = projects.flatMap(p => getDDFindings(p.id));
+        const allIRLs = projects.flatMap(p => getInfoRequests(p.id));
+        const allWS = projects.flatMap(p => getDDWorkstreams(p.id));
+        const allTasks = allWS.flatMap(ws => getDDTasks(ws.id));
+        const openRisks = allRisks.filter(r => r.status === 'open' || r.status === 'mitigating');
+        const criticalRisks = openRisks.filter(r => (r.risk_score || 0) >= 15);
+        const overdueIRLs = allIRLs.filter(ir => ir.due_date && ir.status !== 'complete' && new Date(ir.due_date).getTime() < Date.now());
+        const completedTasks = allTasks.filter(t => t.status === 'complete' || t.status === 'n_a');
+        const redProjects = projects.filter(p => p.rag_status === 'red' && p.status !== 'complete');
+
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="glass-card p-3 text-center">
+              <div className="text-lg font-bold font-mono" style={{ color: 'var(--accent)' }}>{active.length}</div>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>Active Projects</div>
+            </div>
+            <div className="glass-card p-3 text-center">
+              <div className="text-lg font-bold font-mono">
+                {allTasks.length > 0 ? Math.round((completedTasks.length / allTasks.length) * 100) : 0}%
+              </div>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>{completedTasks.length}/{allTasks.length} Tasks</div>
+            </div>
+            <div className="glass-card p-3 text-center">
+              <div className="text-lg font-bold font-mono" style={{ color: criticalRisks.length > 0 ? 'var(--danger)' : 'var(--muted)' }}>
+                {openRisks.length}
+              </div>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>Open Risks {criticalRisks.length > 0 && `(${criticalRisks.length} critical)`}</div>
+            </div>
+            <div className="glass-card p-3 text-center">
+              <div className="text-lg font-bold font-mono" style={{ color: allFindings.filter(f => f.status === 'open').length > 0 ? 'var(--warning)' : 'var(--muted)' }}>
+                {allFindings.filter(f => f.status === 'open').length}
+              </div>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>Open Findings</div>
+            </div>
+            <div className="glass-card p-3 text-center">
+              <div className="text-lg font-bold font-mono" style={{ color: overdueIRLs.length > 0 ? 'var(--danger)' : 'var(--muted)' }}>
+                {overdueIRLs.length}
+              </div>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>Overdue IRLs</div>
+            </div>
+            <div className="glass-card p-3 text-center">
+              <div className="text-lg font-bold font-mono" style={{ color: redProjects.length > 0 ? 'var(--danger)' : 'var(--success)' }}>
+                {redProjects.length > 0 ? `${redProjects.length} Red` : 'All Clear'}
+              </div>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>RAG Status</div>
+            </div>
+          </div>
+        );
+      })()}
 
       {projects.length === 0 ? (
         <div className="glass-card p-12 text-center" style={{ color: 'var(--muted)' }}>

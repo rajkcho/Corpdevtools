@@ -139,14 +139,9 @@ export default function TargetDetailPage() {
             </Link>
           )}
           <button
-            onClick={async () => {
-              const { generateTargetOnePager } = await import('@/lib/target-export');
-              const html = generateTargetOnePager(id);
-              const w = window.open('', '_blank');
-              if (w) { w.document.write(html); w.document.close(); }
-            }}
+            onClick={() => window.open(`/targets/${id}/memo`, '_blank')}
             className="btn btn-secondary btn-sm"
-            title="Print one-pager"
+            title="Print investment memo"
           >
             <Printer size={14} />
           </button>
