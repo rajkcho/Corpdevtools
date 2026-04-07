@@ -6,6 +6,8 @@ import { SCORE_CRITERIA, DEAL_STAGES } from '@/lib/types';
 import type { Target } from '@/lib/types';
 import { X, Plus, ArrowUpDown, ChevronDown } from 'lucide-react';
 
+const COMPARE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+
 function fmt(n: number | undefined, prefix = ''): string {
   if (n === undefined || n === null) return '—';
   if (n >= 1_000_000) return `${prefix}${(n / 1_000_000).toFixed(1)}M`;
@@ -201,6 +203,60 @@ export default function ComparePage() {
               </table>
             </div>
           </div>
+
+          {/* Radar Chart Overlay */}
+          {selectedTargets.some(t => t.score) && (
+            <div className="glass-card p-5">
+              <h3 className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--accent)' }}>Score Comparison</h3>
+              <div className="flex items-center justify-center">
+                <svg viewBox="0 0 300 300" width="300" height="300">
+                  {/* Background grid */}
+                  {[1, 2, 3, 4, 5].map(level => {
+                    const r = (level / 5) * 120;
+                    const points = SCORE_CRITERIA.map((_, i) => {
+                      const angle = (Math.PI * 2 * i) / SCORE_CRITERIA.length - Math.PI / 2;
+                      return `${150 + r * Math.cos(angle)},${150 + r * Math.sin(angle)}`;
+                    }).join(' ');
+                    return <polygon key={level} points={points} fill="none" stroke="var(--border)" strokeWidth="0.5" opacity={0.5} />;
+                  })}
+                  {/* Axis lines */}
+                  {SCORE_CRITERIA.map((c, i) => {
+                    const angle = (Math.PI * 2 * i) / SCORE_CRITERIA.length - Math.PI / 2;
+                    return (
+                      <g key={c.key}>
+                        <line x1="150" y1="150" x2={150 + 120 * Math.cos(angle)} y2={150 + 120 * Math.sin(angle)} stroke="var(--border)" strokeWidth="0.5" />
+                        <text x={150 + 138 * Math.cos(angle)} y={150 + 138 * Math.sin(angle)} textAnchor="middle" dominantBaseline="middle" fontSize="8" fill="var(--muted-foreground)">
+                          {c.label.split(' ')[0]}
+                        </text>
+                      </g>
+                    );
+                  })}
+                  {/* Target polygons */}
+                  {selectedTargets.map((t, ti) => {
+                    if (!t.score) return null;
+                    const points = SCORE_CRITERIA.map((c, i) => {
+                      const val = t.score?.[c.key] || 0;
+                      const r = (val / 5) * 120;
+                      const angle = (Math.PI * 2 * i) / SCORE_CRITERIA.length - Math.PI / 2;
+                      return `${150 + r * Math.cos(angle)},${150 + r * Math.sin(angle)}`;
+                    }).join(' ');
+                    return (
+                      <polygon key={t.id} points={points} fill={`${COMPARE_COLORS[ti]}20`} stroke={COMPARE_COLORS[ti]} strokeWidth="2" />
+                    );
+                  })}
+                </svg>
+              </div>
+              {/* Legend */}
+              <div className="flex items-center justify-center gap-4 mt-3">
+                {selectedTargets.filter(t => t.score).map((t, i) => (
+                  <div key={t.id} className="flex items-center gap-1.5 text-xs">
+                    <div className="w-3 h-3 rounded-sm" style={{ background: COMPARE_COLORS[i] }} />
+                    <span>{t.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Quick add */}
           <div className="flex gap-2">
