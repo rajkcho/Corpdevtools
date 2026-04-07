@@ -169,6 +169,18 @@ export default function TargetDetailPage() {
           </button>
           <button
             onClick={async () => {
+              const { generateICMemo } = await import('@/lib/ic-memo');
+              const html = generateICMemo(id);
+              const w = window.open('', '_blank');
+              if (w) { w.document.write(html); w.document.close(); }
+            }}
+            className="btn btn-secondary btn-sm"
+            title="Generate IC Memo"
+          >
+            IC Memo
+          </button>
+          <button
+            onClick={async () => {
               const { generateDealMemo } = await import('@/lib/deal-memo');
               const memo = generateDealMemo(id);
               const blob = new Blob([memo], { type: 'text/plain' });
