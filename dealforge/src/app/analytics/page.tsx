@@ -6,7 +6,7 @@ import { DEAL_STAGES, VERTICALS } from '@/lib/types';
 import type { Target, Touchpoint, DDProject, DealStage } from '@/lib/types';
 import { getActivities } from '@/lib/db';
 import type { ActivityEntry } from '@/lib/types';
-import { TrendingUp, Clock, Users, DollarSign, Activity, BarChart3, ArrowRight } from 'lucide-react';
+import { TrendingUp, Clock, Users, DollarSign, Activity, BarChart3, ArrowRight, AlertTriangle, MapPin, Calendar } from 'lucide-react';
 
 function fmt(n: number, prefix = ''): string {
   if (n >= 1_000_000) return `${prefix}${(n / 1_000_000).toFixed(1)}M`;
@@ -330,29 +330,56 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      {/* Conversion funnel */}
+      {/* Enhanced Pipeline Funnel */}
       <div className="glass-card p-5">
         <h2 className="font-semibold mb-4">Pipeline Funnel</h2>
-        <div className="space-y-1">
-          {stageData.filter(s => s.count > 0).map((s, i, arr) => {
-            const widthPct = Math.max((s.count / Math.max(arr[0]?.count || 1, 1)) * 100, 10);
+        <div className="space-y-0">
+          {stageData.filter(s => s.count > 0 || !['closed_won', 'closed_lost'].includes(s.key)).map((s, i, arr) => {
+            const maxCount = Math.max(arr[0]?.count || 1, 1);
+            const widthPct = Math.max((s.count / maxCount) * 100, 12);
+            const prevCount = i > 0 ? arr[i - 1]?.count || 0 : 0;
+            const dropOff = i > 0 && prevCount > 0 ? Math.round(((prevCount - s.count) / prevCount) * 100) : 0;
             return (
-              <div key={s.key} className="flex items-center justify-center">
-                <div
-                  className="py-2 text-center rounded text-xs font-medium"
-                  style={{
-                    width: `${widthPct}%`,
-                    background: s.color,
-                    color: 'white',
-                    transition: 'width 0.3s',
-                    minWidth: '80px',
-                  }}
-                >
-                  {s.label}: {s.count}
+              <div key={s.key}>
+                {i > 0 && dropOff > 0 && (
+                  <div className="flex items-center justify-center py-0.5">
+                    <span className="text-[10px] font-mono" style={{ color: dropOff > 50 ? 'var(--danger)' : 'var(--muted)' }}>
+                      ▼ {dropOff}% drop-off
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center justify-center">
+                  <div
+                    className="py-2.5 text-center text-xs font-medium relative"
+                    style={{
+                      width: `${widthPct}%`,
+                      background: s.color,
+                      color: 'white',
+                      transition: 'width 0.3s',
+                      minWidth: '100px',
+                      clipPath: 'polygon(2% 0%, 98% 0%, 100% 100%, 0% 100%)',
+                    }}
+                  >
+                    {s.label}: {s.count} {s.value > 0 ? `(${fmt(s.value, '$')})` : ''}
+                  </div>
                 </div>
               </div>
             );
           })}
+        </div>
+        <div className="flex items-center gap-4 mt-4 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+          <div className="text-xs" style={{ color: 'var(--muted)' }}>
+            Top-of-funnel: <span className="font-mono font-bold">{stageData.slice(0, 3).reduce((s, d) => s + d.count, 0)}</span>
+          </div>
+          <div className="text-xs" style={{ color: 'var(--muted)' }}>
+            Mid-funnel: <span className="font-mono font-bold">{stageData.slice(3, 6).reduce((s, d) => s + d.count, 0)}</span>
+          </div>
+          <div className="text-xs" style={{ color: 'var(--muted)' }}>
+            Late-stage: <span className="font-mono font-bold">{stageData.slice(6, 8).reduce((s, d) => s + d.count, 0)}</span>
+          </div>
+          <div className="text-xs ml-auto" style={{ color: 'var(--success)' }}>
+            Closed Won: <span className="font-mono font-bold">{won.length}</span>
+          </div>
         </div>
       </div>
       {/* Stage Conversion Rates */}
@@ -495,6 +522,212 @@ export default function AnalyticsPage() {
           </div>
         </div>
       )}
+
+      {/* Deal Aging Analysis */}
+      <div className="glass-card p-5">
+        <h2 className="font-semibold mb-4 flex items-center gap-2">
+          <AlertTriangle size={16} style={{ color: 'var(--warning)' }} />
+          Deal Aging Analysis
+        </h2>
+        <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>
+          Days since each active target entered its current stage. Red = stale (&gt;30d).
+        </p>
+        <div className="space-y-2">
+          {active
+            .map(t => ({
+              ...t,
+              daysInStage: Math.floor((Date.now() - new Date(t.stage_entered_at).getTime()) / 86400000),
+              daysInPipeline: Math.floor((Date.now() - new Date(t.created_at).getTime()) / 86400000),
+            }))
+            .sort((a, b) => b.daysInStage - a.daysInStage)
+            .slice(0, 15)
+            .map(t => {
+              const maxDaysAging = 90;
+              const barPct = Math.min((t.daysInStage / maxDaysAging) * 100, 100);
+              const stg = DEAL_STAGES.find(s => s.key === t.stage);
+              return (
+                <div key={t.id} className="flex items-center gap-3">
+                  <span className="text-xs w-28 truncate font-medium">{t.name}</span>
+                  <span className="badge text-[9px]" style={{ background: `${stg?.color || 'var(--muted)'}20`, color: stg?.color }}>{stg?.label}</span>
+                  <div className="flex-1 h-5 rounded overflow-hidden" style={{ background: 'var(--background)' }}>
+                    <div
+                      className="h-full rounded flex items-center px-2"
+                      style={{
+                        width: `${Math.max(barPct, 4)}%`,
+                        background: t.daysInStage > 30 ? 'var(--danger)' : t.daysInStage > 14 ? 'var(--warning)' : 'var(--accent)',
+                      }}
+                    >
+                      <span className="text-[10px] font-bold text-white">{t.daysInStage}d</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono w-14 text-right" style={{ color: 'var(--muted)' }}>{t.daysInPipeline}d total</span>
+                </div>
+              );
+            })}
+          {active.length === 0 && <p className="text-sm" style={{ color: 'var(--muted)' }}>No active targets</p>}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Geography Breakdown */}
+        <div className="glass-card p-5">
+          <h2 className="font-semibold mb-4 flex items-center gap-2">
+            <MapPin size={16} style={{ color: 'var(--accent)' }} />
+            Geography Breakdown
+          </h2>
+          <div className="space-y-2">
+            {(() => {
+              const geoMap = new Map<string, { count: number; value: number }>();
+              for (const t of targets) {
+                const geo = t.geography || 'Unknown';
+                const existing = geoMap.get(geo) || { count: 0, value: 0 };
+                geoMap.set(geo, { count: existing.count + 1, value: existing.value + (t.asking_price || 0) });
+              }
+              const geoArr = Array.from(geoMap.entries())
+                .map(([name, data]) => ({ name, ...data }))
+                .sort((a, b) => b.count - a.count);
+              const maxGeo = Math.max(...geoArr.map(g => g.count), 1);
+              return geoArr.map(g => (
+                <div key={g.name} className="flex items-center gap-3">
+                  <span className="text-xs w-28 truncate" style={{ color: 'var(--muted-foreground)' }}>{g.name}</span>
+                  <div className="flex-1 h-6 rounded overflow-hidden" style={{ background: 'var(--background)' }}>
+                    <div
+                      className="h-full rounded flex items-center px-2"
+                      style={{ width: `${Math.max((g.count / maxGeo) * 100, 8)}%`, background: 'var(--accent)' }}
+                    >
+                      <span className="text-xs font-bold text-white">{g.count}</span>
+                    </div>
+                  </div>
+                  {g.value > 0 && <span className="text-xs font-mono" style={{ color: 'var(--muted)' }}>{fmt(g.value, '$')}</span>}
+                </div>
+              ));
+            })()}
+          </div>
+        </div>
+
+        {/* Valuation Multiples Distribution */}
+        <div className="glass-card p-5">
+          <h2 className="font-semibold mb-4 flex items-center gap-2">
+            <DollarSign size={16} style={{ color: 'var(--success)' }} />
+            Valuation Multiples
+          </h2>
+          <div className="space-y-3">
+            {(() => {
+              const withMultiples = targets.filter(t => t.asking_price && t.revenue && t.revenue > 0);
+              if (withMultiples.length === 0) return <p className="text-sm" style={{ color: 'var(--muted)' }}>No targets with both price and revenue data.</p>;
+              const evRevMultiples = withMultiples.map(t => ({
+                name: t.name,
+                evRev: t.asking_price! / t.revenue!,
+                evArr: t.arr && t.arr > 0 ? t.asking_price! / t.arr : null,
+                evEbita: t.ebita && t.ebita > 0 ? t.asking_price! / t.ebita : null,
+              })).sort((a, b) => a.evRev - b.evRev);
+              const maxMultiple = Math.max(...evRevMultiples.map(m => m.evRev), 1);
+              const avgMultiple = evRevMultiples.reduce((s, m) => s + m.evRev, 0) / evRevMultiples.length;
+              return (
+                <>
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className="text-xs" style={{ color: 'var(--muted)' }}>
+                      Avg EV/Rev: <span className="font-mono font-bold" style={{ color: 'var(--foreground)' }}>{avgMultiple.toFixed(1)}x</span>
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--muted)' }}>
+                      Range: <span className="font-mono">{evRevMultiples[0].evRev.toFixed(1)}x – {evRevMultiples[evRevMultiples.length - 1].evRev.toFixed(1)}x</span>
+                    </div>
+                  </div>
+                  {evRevMultiples.map(m => (
+                    <div key={m.name} className="flex items-center gap-3">
+                      <span className="text-xs w-28 truncate" style={{ color: 'var(--muted-foreground)' }}>{m.name}</span>
+                      <div className="flex-1 h-5 rounded overflow-hidden" style={{ background: 'var(--background)' }}>
+                        <div
+                          className="h-full rounded flex items-center px-2"
+                          style={{
+                            width: `${Math.max((m.evRev / maxMultiple) * 100, 8)}%`,
+                            background: m.evRev <= 3 ? 'var(--success)' : m.evRev <= 5 ? 'var(--accent)' : 'var(--warning)',
+                          }}
+                        >
+                          <span className="text-[10px] font-bold text-white">{m.evRev.toFixed(1)}x</span>
+                        </div>
+                      </div>
+                      {m.evArr && <span className="text-[10px] font-mono" style={{ color: 'var(--muted)' }}>ARR: {m.evArr.toFixed(1)}x</span>}
+                    </div>
+                  ))}
+                  <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+                    Green ≤3x (attractive), Blue 3-5x (fair), Yellow &gt;5x (premium)
+                  </p>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      </div>
+
+      {/* Pipeline Vintage Analysis */}
+      <div className="glass-card p-5">
+        <h2 className="font-semibold mb-4 flex items-center gap-2">
+          <Calendar size={16} style={{ color: 'var(--accent)' }} />
+          Pipeline Vintage (Targets by Month Added)
+        </h2>
+        <div className="flex items-end gap-2 h-36">
+          {(() => {
+            const vintageMap = new Map<string, { label: string; count: number; active: number }>();
+            for (let i = 11; i >= 0; i--) {
+              const d = new Date();
+              d.setMonth(d.getMonth() - i);
+              const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+              const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+              vintageMap.set(key, { label, count: 0, active: 0 });
+            }
+            for (const t of targets) {
+              const key = t.created_at.substring(0, 7);
+              if (vintageMap.has(key)) {
+                const v = vintageMap.get(key)!;
+                v.count++;
+                if (!['closed_won', 'closed_lost'].includes(t.stage)) v.active++;
+              }
+            }
+            const vintageArr = Array.from(vintageMap.values());
+            const maxVintage = Math.max(...vintageArr.map(v => v.count), 1);
+            return vintageArr.map((v, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>{v.count || ''}</span>
+                <div className="w-full flex flex-col justify-end" style={{ height: '100px' }}>
+                  {v.count > 0 && (
+                    <>
+                      <div
+                        className="w-full rounded-t"
+                        style={{
+                          height: `${(v.active / maxVintage) * 100}%`,
+                          background: 'var(--accent)',
+                          minHeight: v.active > 0 ? '4px' : '0',
+                        }}
+                      />
+                      <div
+                        className="w-full"
+                        style={{
+                          height: `${((v.count - v.active) / maxVintage) * 100}%`,
+                          background: 'var(--muted)',
+                          opacity: 0.3,
+                          minHeight: v.count > v.active ? '2px' : '0',
+                        }}
+                      />
+                    </>
+                  )}
+                </div>
+                <span className="text-[9px]" style={{ color: 'var(--muted)' }}>{v.label}</span>
+              </div>
+            ));
+          })()}
+        </div>
+        <div className="flex items-center gap-4 mt-2">
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded" style={{ background: 'var(--accent)' }} />
+            <span className="text-[10px]" style={{ color: 'var(--muted)' }}>Active</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded" style={{ background: 'var(--muted)', opacity: 0.3 }} />
+            <span className="text-[10px]" style={{ color: 'var(--muted)' }}>Closed</span>
+          </div>
+        </div>
+      </div>
 
       {/* Activity Heatmap - Weekly */}
       <div className="glass-card p-5">

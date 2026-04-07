@@ -12,7 +12,7 @@ import Link from 'next/link';
 import {
   getTarget, getTargets, updateTarget, deleteTarget, getStageHistory,
   getTouchpoints, createTouchpoint, deleteTouchpoint,
-  getMeetingNotes, createMeetingNote, deleteMeetingNote,
+  getMeetingNotes, createMeetingNote, updateMeetingNote, deleteMeetingNote,
   getContacts, createContact, updateContact, deleteContact,
   getDDProjectByTarget, createDDProject, populateDDTemplates,
   getDealTerms, createDealTerm, updateDealTerm, deleteDealTerm,
@@ -510,7 +510,7 @@ export default function TargetDetailPage() {
           ) : (
             <div className="space-y-3">
               {meetingNotes.map(note => (
-                <MeetingNoteCard key={note.id} note={note} onDelete={() => { deleteMeetingNote(note.id); reload(); }} />
+                <MeetingNoteCard key={note.id} note={note} onDelete={() => { deleteMeetingNote(note.id); reload(); }} onUpdate={reload} />
               ))}
             </div>
           )}
@@ -1366,6 +1366,12 @@ function DealRoomPanel({ targetId, terms, activities, onReload }: { targetId: st
         </div>
       )}
 
+      {/* Deal Thesis */}
+      <DealThesis targetId={targetId} />
+
+      {/* Competitor Tracking */}
+      <CompetitorTracker targetId={targetId} />
+
       {/* Qualification Checklist */}
       <div className="glass-card p-4">
         <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--accent)' }}>
@@ -1562,10 +1568,18 @@ function RelatedTargets({ targetId, onReload }: { targetId: string; onReload: ()
   );
 }
 
-function MeetingNoteCard({ note, onDelete }: { note: MeetingNote; onDelete: () => void }) {
+function MeetingNoteCard({ note, onDelete, onUpdate }: { note: MeetingNote; onDelete: () => void; onUpdate?: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const hasAI = !!(note.ai_summary || note.ai_action_items?.length || note.ai_key_insights?.length || note.ai_deal_signals?.length);
   const sentimentColors: Record<string, string> = { positive: 'var(--success)', negative: 'var(--danger)', neutral: 'var(--muted-foreground)' };
+
+  const toggleActionItem = (index: number) => {
+    if (!note.ai_action_items) return;
+    const updated = [...note.ai_action_items];
+    updated[index] = { ...updated[index], completed: !updated[index].completed };
+    updateMeetingNote(note.id, { ai_action_items: updated });
+    onUpdate?.();
+  };
 
   return (
     <div className="glass-card p-4">
@@ -1619,9 +1633,9 @@ function MeetingNoteCard({ note, onDelete }: { note: MeetingNote; onDelete: () =
           <strong className="text-xs" style={{ color: 'var(--warning)' }}>Action Items</strong>
           <ul className="mt-1 space-y-1">
             {note.ai_action_items.map((item, i) => (
-              <li key={i} className="text-sm flex items-start gap-2 p-1.5 rounded" style={{ background: 'var(--background)' }}>
-                <input type="checkbox" checked={item.completed} readOnly className="mt-0.5" />
-                <span className="flex-1">{item.text}</span>
+              <li key={i} className="text-sm flex items-start gap-2 p-1.5 rounded cursor-pointer" style={{ background: 'var(--background)' }} onClick={() => toggleActionItem(i)}>
+                <input type="checkbox" checked={item.completed} readOnly className="mt-0.5 pointer-events-none" />
+                <span className="flex-1" style={{ textDecoration: item.completed ? 'line-through' : 'none', opacity: item.completed ? 0.6 : 1 }}>{item.text}</span>
                 {item.assignee && <span className="text-xs" style={{ color: 'var(--muted)' }}>{item.assignee}</span>}
                 {item.due_date && <span className="text-xs" style={{ color: 'var(--accent)' }}>{item.due_date}</span>}
               </li>
@@ -1719,6 +1733,179 @@ function QualificationChecklist({ targetId }: { targetId: string }) {
           ))}
         </div>
       ))}
+    </div>
+  );
+}
+
+// === DEAL THESIS ===
+function DealThesis({ targetId }: { targetId: string }) {
+  const storageKey = `dealforge_thesis_${targetId}`;
+  const [thesis, setThesis] = useState('');
+  const [risks, setRisks] = useState('');
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      const data = JSON.parse(saved);
+      setThesis(data.thesis || '');
+      setRisks(data.risks || '');
+    }
+  }, [storageKey]);
+
+  const save = () => {
+    localStorage.setItem(storageKey, JSON.stringify({ thesis, risks }));
+    setEditing(false);
+  };
+
+  return (
+    <div className="glass-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--success)' }}>
+          Investment Thesis
+        </h3>
+        <button onClick={() => editing ? save() : setEditing(true)} className="btn btn-ghost btn-sm text-xs">
+          {editing ? 'Save' : 'Edit'}
+        </button>
+      </div>
+      {editing ? (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Why should we acquire this company?</label>
+            <textarea
+              value={thesis}
+              onChange={e => setThesis(e.target.value)}
+              className="w-full text-sm"
+              rows={4}
+              placeholder="Describe the strategic rationale, market opportunity, and synergy potential..."
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Key risks & mitigants</label>
+            <textarea
+              value={risks}
+              onChange={e => setRisks(e.target.value)}
+              className="w-full text-sm"
+              rows={3}
+              placeholder="Customer concentration, technology debt, integration complexity..."
+            />
+          </div>
+        </div>
+      ) : (
+        <div>
+          {thesis ? (
+            <div className="space-y-3">
+              <div>
+                <div className="text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Thesis</div>
+                <p className="text-sm whitespace-pre-wrap">{thesis}</p>
+              </div>
+              {risks && (
+                <div>
+                  <div className="text-xs font-medium mb-1" style={{ color: 'var(--warning)' }}>Key Risks</div>
+                  <p className="text-sm whitespace-pre-wrap">{risks}</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>No investment thesis written yet. Click Edit to document your deal rationale.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// === COMPETITOR TRACKER ===
+interface Competitor {
+  id: string;
+  name: string;
+  type: 'direct' | 'indirect' | 'adjacent';
+  notes: string;
+  threat_level: 1 | 2 | 3;
+}
+
+function CompetitorTracker({ targetId }: { targetId: string }) {
+  const storageKey = `dealforge_competitors_${targetId}`;
+  const [competitors, setCompetitors] = useState<Competitor[]>([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ name: '', type: 'direct' as Competitor['type'], notes: '', threat_level: 2 as Competitor['threat_level'] });
+
+  useEffect(() => {
+    const saved = localStorage.getItem(storageKey);
+    if (saved) setCompetitors(JSON.parse(saved));
+  }, [storageKey]);
+
+  const save = (data: Competitor[]) => {
+    setCompetitors(data);
+    localStorage.setItem(storageKey, JSON.stringify(data));
+  };
+
+  const handleAdd = () => {
+    save([...competitors, { ...form, id: crypto.randomUUID() }]);
+    setForm({ name: '', type: 'direct', notes: '', threat_level: 2 });
+    setShowAdd(false);
+  };
+
+  const handleDelete = (id: string) => save(competitors.filter(c => c.id !== id));
+
+  const threatColors = { 1: 'var(--success)', 2: 'var(--warning)', 3: 'var(--danger)' };
+  const threatLabels = { 1: 'Low', 2: 'Medium', 3: 'High' };
+  const typeColors = { direct: 'var(--danger)', indirect: 'var(--warning)', adjacent: 'var(--accent)' };
+
+  return (
+    <div className="glass-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>
+          Competitive Landscape
+        </h3>
+        <button onClick={() => setShowAdd(!showAdd)} className="btn btn-ghost btn-sm text-xs">
+          {showAdd ? 'Cancel' : '+ Add'}
+        </button>
+      </div>
+
+      {showAdd && (
+        <div className="p-3 rounded-lg mb-3 space-y-2" style={{ background: 'var(--background)' }}>
+          <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="w-full text-sm" placeholder="Competitor name" />
+          <div className="flex gap-2">
+            <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as Competitor['type'] }))} className="text-sm flex-1">
+              <option value="direct">Direct</option>
+              <option value="indirect">Indirect</option>
+              <option value="adjacent">Adjacent</option>
+            </select>
+            <select value={form.threat_level} onChange={e => setForm(f => ({ ...f, threat_level: Number(e.target.value) as Competitor['threat_level'] }))} className="text-sm flex-1">
+              <option value={1}>Low Threat</option>
+              <option value={2}>Medium Threat</option>
+              <option value={3}>High Threat</option>
+            </select>
+          </div>
+          <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="w-full text-sm" rows={2} placeholder="Notes on competitive positioning..." />
+          <button onClick={handleAdd} disabled={!form.name} className="btn btn-primary btn-sm">Add Competitor</button>
+        </div>
+      )}
+
+      {competitors.length === 0 && !showAdd ? (
+        <p className="text-xs" style={{ color: 'var(--muted)' }}>No competitors tracked. Add known competitors to assess market positioning.</p>
+      ) : (
+        <div className="space-y-2">
+          {competitors.map(c => (
+            <div key={c.id} className="flex items-start gap-3 p-2 rounded" style={{ background: 'var(--background)' }}>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{c.name}</span>
+                  <span className="badge text-[9px]" style={{ background: `${typeColors[c.type]}20`, color: typeColors[c.type] }}>{c.type}</span>
+                  <span className="badge text-[9px]" style={{ background: `${threatColors[c.threat_level]}20`, color: threatColors[c.threat_level] }}>
+                    {threatLabels[c.threat_level]} threat
+                  </span>
+                </div>
+                {c.notes && <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{c.notes}</p>}
+              </div>
+              <button onClick={() => handleDelete(c.id)} className="btn-ghost p-1 rounded flex-shrink-0">
+                <Trash2 size={12} style={{ color: 'var(--muted)' }} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
