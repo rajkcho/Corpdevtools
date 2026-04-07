@@ -1604,6 +1604,50 @@ export default function AnalyticsPage() {
           </div>
         );
       })()}
+      {/* Pipeline Flow Funnel */}
+      {(() => {
+        if (targets.length < 3) return null;
+        const stages = DEAL_STAGES.filter(s => !['closed_lost'].includes(s.key));
+        const funnelData = stages.map((s, i) => {
+          const atOrBeyond = targets.filter(t => {
+            const tIdx = DEAL_STAGES.findIndex(ds => ds.key === t.stage);
+            return tIdx >= i && t.stage !== 'closed_lost';
+          }).length;
+          return { ...s, count: atOrBeyond, pct: Math.round((atOrBeyond / targets.length) * 100) };
+        });
+
+        return (
+          <div className="glass-card p-5">
+            <h2 className="font-semibold mb-1 flex items-center gap-2">
+              <ArrowRight size={16} style={{ color: 'var(--accent)' }} /> Pipeline Conversion Funnel
+            </h2>
+            <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>Percentage of targets that reached each stage or beyond</p>
+            <div className="space-y-1">
+              {funnelData.map((s, i) => {
+                const width = Math.max(s.pct, 6);
+                const prevPct = i > 0 ? funnelData[i - 1].pct : 100;
+                const dropoff = i > 0 && prevPct > 0 ? Math.round(((prevPct - s.pct) / prevPct) * 100) : 0;
+                return (
+                  <div key={s.key} className="flex items-center gap-2">
+                    <span className="text-[10px] w-24 truncate text-right" style={{ color: 'var(--muted-foreground)' }}>{s.label}</span>
+                    <div className="flex-1 flex justify-center">
+                      <div
+                        className="h-7 rounded flex items-center justify-center text-[10px] font-bold text-white transition-all"
+                        style={{ width: `${width}%`, background: s.color, minWidth: 40 }}
+                      >
+                        {s.pct}% ({s.count})
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono w-14 text-right" style={{ color: dropoff > 30 ? 'var(--danger)' : 'var(--muted)' }}>
+                      {dropoff > 0 ? `-${dropoff}%` : ''}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
