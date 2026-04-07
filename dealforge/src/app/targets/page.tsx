@@ -29,7 +29,7 @@ export default function TargetsPage() {
       if (filterVertical !== 'all' && t.vertical !== filterVertical) return false;
       if (!search) return true;
       const q = search.toLowerCase();
-      return t.name.toLowerCase().includes(q) || t.vertical.toLowerCase().includes(q) || t.geography.toLowerCase().includes(q);
+      return t.name.toLowerCase().includes(q) || t.vertical.toLowerCase().includes(q) || t.geography.toLowerCase().includes(q) || t.tags?.some(tag => tag.toLowerCase().includes(q));
     })
     .sort((a, b) => {
       let cmp = 0;
@@ -179,6 +179,16 @@ export default function TargetsPage() {
                 {t.asking_price ? <span style={{ color: 'var(--success)' }}>Ask: ${(t.asking_price / 1000000).toFixed(1)}M</span> : null}
                 {t.customer_count ? <span>{t.customer_count} customers</span> : null}
               </div>
+              {/* Tags */}
+              {t.tags && t.tags.length > 0 && (
+                <div className="flex gap-1 mt-2 flex-wrap">
+                  {t.tags.map(tag => (
+                    <span key={tag} className="badge" style={{ background: 'var(--accent-muted)', color: 'var(--accent)', fontSize: '0.6rem' }}>
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
               {/* Mini score bar */}
               {t.weighted_score && (
                 <div className="mt-2 h-1 rounded-full overflow-hidden" style={{ background: 'var(--background)' }}>

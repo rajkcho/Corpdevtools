@@ -221,6 +221,15 @@ export default function TargetForm({ initial, onSubmit, onCancel, submitLabel = 
             <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Notes</label>
             <textarea value={form.notes || ''} onChange={e => set('notes', e.target.value)} rows={4} className="w-full" placeholder="Additional notes about the target..." />
           </div>
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Tags (comma-separated)</label>
+            <input
+              value={(form.tags || []).join(', ')}
+              onChange={e => set('tags', e.target.value.split(',').map(t => t.trim()).filter(Boolean))}
+              className="w-full"
+              placeholder="e.g. high-priority, tuck-in, succession-play"
+            />
+          </div>
         </div>
       )}
 

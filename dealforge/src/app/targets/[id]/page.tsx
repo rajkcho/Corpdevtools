@@ -116,6 +116,15 @@ export default function TargetDetailPage() {
                 </a>
               )}
             </div>
+            {target.tags && target.tags.length > 0 && (
+              <div className="flex gap-1 mt-1.5 flex-wrap">
+                {target.tags.map(tag => (
+                  <span key={tag} className="badge" style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex gap-2">

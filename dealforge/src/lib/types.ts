@@ -107,6 +107,7 @@ export interface Target {
   broker_name?: string;
   asking_price?: number;
   notes?: string;
+  tags?: string[];
 
   // Timestamps
   created_at: string;
