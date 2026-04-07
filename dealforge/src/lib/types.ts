@@ -322,3 +322,35 @@ export interface PipelineStats {
   total_pipeline_value: number;
   avg_days_in_stage: Record<DealStage, number>;
 }
+
+// --- Activity Log ---
+
+export type ActivityType =
+  | 'target_created' | 'target_updated' | 'target_deleted' | 'stage_changed'
+  | 'touchpoint_added' | 'meeting_note_added' | 'contact_added'
+  | 'dd_project_created' | 'dd_task_completed' | 'dd_risk_added' | 'dd_finding_added'
+  | 'irl_sent' | 'document_uploaded' | 'phase_changed' | 'score_updated';
+
+export interface ActivityEntry {
+  id: string;
+  type: ActivityType;
+  target_id?: string;
+  target_name?: string;
+  project_id?: string;
+  description: string;
+  metadata?: Record<string, string>;
+  created_at: string;
+}
+
+// --- Deal Room ---
+
+export interface DealTerm {
+  id: string;
+  target_id: string;
+  category: 'valuation' | 'structure' | 'conditions' | 'timeline' | 'other';
+  label: string;
+  value: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}

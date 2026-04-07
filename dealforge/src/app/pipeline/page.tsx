@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, List, KanbanSquare, GripVertical } from 'lucide-react';
+import { Plus, List, KanbanSquare, GripVertical, CheckSquare, Square, Trash2, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-import { getTargets, createTarget, updateTarget } from '@/lib/db';
+import { getTargets, createTarget, updateTarget, deleteTarget } from '@/lib/db';
 import { DEAL_STAGES } from '@/lib/types';
 import type { Target, DealStage } from '@/lib/types';
 import Modal from '@/components/Modal';
@@ -17,6 +17,8 @@ export default function PipelinePage() {
   const [filterVertical, setFilterVertical] = useState<string>('all');
   const [filterSource, setFilterSource] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkStage, setBulkStage] = useState<string>('');
 
   const reload = useCallback(() => setTargets(getTargets()), []);
 
@@ -45,6 +47,39 @@ export default function PipelinePage() {
       reload();
       setDragTarget(null);
     }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    const ids = filteredTargets.map(t => t.id);
+    setSelectedIds(prev => prev.size === ids.length ? new Set() : new Set(ids));
+  };
+
+  const handleBulkStageChange = () => {
+    if (!bulkStage || selectedIds.size === 0) return;
+    for (const id of selectedIds) {
+      updateTarget(id, { stage: bulkStage as DealStage });
+    }
+    setSelectedIds(new Set());
+    setBulkStage('');
+    reload();
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} target(s)? This cannot be undone.`)) return;
+    for (const id of selectedIds) {
+      deleteTarget(id);
+    }
+    setSelectedIds(new Set());
+    reload();
   };
 
   const verticals = Array.from(new Set(targets.map(t => t.vertical))).sort();
@@ -101,6 +136,37 @@ export default function PipelinePage() {
           <option value="referral">Referral</option>
         </select>
       </div>
+
+      {/* Bulk Actions Bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'var(--accent-muted)', border: '1px solid var(--accent)' }}>
+          <span className="text-sm font-medium" style={{ color: 'var(--accent)' }}>
+            {selectedIds.size} selected
+          </span>
+          <select
+            value={bulkStage}
+            onChange={e => setBulkStage(e.target.value)}
+            className="text-sm"
+            style={{ width: 160 }}
+          >
+            <option value="">Move to stage...</option>
+            {DEAL_STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+          <button
+            onClick={handleBulkStageChange}
+            disabled={!bulkStage}
+            className="btn btn-primary btn-sm"
+          >
+            <ArrowRight size={14} /> Move
+          </button>
+          <button onClick={handleBulkDelete} className="btn btn-danger btn-sm">
+            <Trash2 size={14} /> Delete
+          </button>
+          <button onClick={() => setSelectedIds(new Set())} className="btn btn-ghost btn-sm ml-auto">
+            Clear Selection
+          </button>
+        </div>
+      )}
 
       {/* Kanban View */}
       {view === 'kanban' ? (
@@ -186,6 +252,13 @@ export default function PipelinePage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b" style={{ borderColor: 'var(--border)' }}>
+                <th className="p-3 w-8">
+                  <button onClick={selectAll}>
+                    {selectedIds.size === filteredTargets.length && filteredTargets.length > 0
+                      ? <CheckSquare size={14} style={{ color: 'var(--accent)' }} />
+                      : <Square size={14} style={{ color: 'var(--muted)' }} />}
+                  </button>
+                </th>
                 <th className="text-left p-3 font-medium" style={{ color: 'var(--muted-foreground)' }}>Name</th>
                 <th className="text-left p-3 font-medium" style={{ color: 'var(--muted-foreground)' }}>Vertical</th>
                 <th className="text-left p-3 font-medium" style={{ color: 'var(--muted-foreground)' }}>Stage</th>
@@ -198,6 +271,13 @@ export default function PipelinePage() {
             <tbody>
               {filteredTargets.map(t => (
                 <tr key={t.id} className="border-b hover:bg-opacity-50" style={{ borderColor: 'var(--border)' }}>
+                  <td className="p-3 w-8">
+                    <button onClick={() => toggleSelect(t.id)}>
+                      {selectedIds.has(t.id)
+                        ? <CheckSquare size={14} style={{ color: 'var(--accent)' }} />
+                        : <Square size={14} style={{ color: 'var(--muted)' }} />}
+                    </button>
+                  </td>
                   <td className="p-3">
                     <Link href={`/targets/${t.id}`} className="font-medium hover:underline" style={{ color: 'var(--accent)' }}>
                       {t.name}

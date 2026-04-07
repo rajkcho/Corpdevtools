@@ -14,9 +14,11 @@ import {
   getMeetingNotes, createMeetingNote, deleteMeetingNote,
   getContacts, createContact, deleteContact,
   getDDProjectByTarget, createDDProject, populateDDTemplates,
+  getDealTerms, createDealTerm, updateDealTerm, deleteDealTerm,
+  getActivitiesForTarget, logActivity,
 } from '@/lib/db';
 import { DEAL_STAGES, SCORE_CRITERIA } from '@/lib/types';
-import type { Target, Touchpoint, MeetingNote, Contact, DealScore } from '@/lib/types';
+import type { Target, Touchpoint, MeetingNote, Contact, DealScore, DealTerm, ActivityEntry } from '@/lib/types';
 import Modal from '@/components/Modal';
 import TargetForm from '@/components/TargetForm';
 
@@ -43,8 +45,10 @@ export default function TargetDetailPage() {
   const [showTouchpointModal, setShowTouchpointModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'timeline' | 'notes' | 'contacts' | 'scoring'>('timeline');
+  const [activeTab, setActiveTab] = useState<'timeline' | 'notes' | 'contacts' | 'scoring' | 'dealroom'>('timeline');
   const [ddProjectId, setDDProjectId] = useState<string | null>(null);
+  const [dealTerms, setDealTerms] = useState<DealTerm[]>([]);
+  const [activities, setActivities] = useState<ActivityEntry[]>([]);
 
   const reload = useCallback(() => {
     const t = getTarget(id);
@@ -55,6 +59,8 @@ export default function TargetDetailPage() {
     setContacts(getContacts(id));
     const dd = getDDProjectByTarget(id);
     setDDProjectId(dd?.id || null);
+    setDealTerms(getDealTerms(id));
+    setActivities(getActivitiesForTarget(id));
   }, [id, router]);
 
   useEffect(() => { reload(); }, [reload]);
@@ -138,17 +144,23 @@ export default function TargetDetailPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 p-1 rounded-lg w-fit" style={{ background: 'var(--card)' }}>
-        {(['timeline', 'notes', 'contacts', 'scoring'] as const).map(tab => (
+        {([
+          { key: 'timeline', label: 'Timeline' },
+          { key: 'notes', label: 'Meeting Notes' },
+          { key: 'contacts', label: 'Contacts' },
+          { key: 'dealroom', label: 'Deal Room' },
+          { key: 'scoring', label: 'Scoring' },
+        ] as const).map(tab => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className="px-4 py-1.5 text-sm font-medium rounded-md capitalize transition-colors"
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className="px-4 py-1.5 text-sm font-medium rounded-md transition-colors"
             style={{
-              background: activeTab === tab ? 'var(--accent)' : 'transparent',
-              color: activeTab === tab ? 'white' : 'var(--muted-foreground)',
+              background: activeTab === tab.key ? 'var(--accent)' : 'transparent',
+              color: activeTab === tab.key ? 'white' : 'var(--muted-foreground)',
             }}
           >
-            {tab === 'notes' ? 'Meeting Notes' : tab}
+            {tab.label}
           </button>
         ))}
       </div>
@@ -275,6 +287,16 @@ export default function TargetDetailPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Deal Room Tab */}
+      {activeTab === 'dealroom' && (
+        <DealRoomPanel
+          targetId={id}
+          terms={dealTerms}
+          activities={activities}
+          onReload={reload}
+        />
       )}
 
       {/* Scoring Tab */}
@@ -631,6 +653,154 @@ function MeetingNoteUpload({ targetId, targetName, onDone, onCancel }: { targetI
         </button>
       </div>
     </form>
+  );
+}
+
+// === DEAL ROOM PANEL ===
+function DealRoomPanel({ targetId, terms, activities, onReload }: { targetId: string; terms: DealTerm[]; activities: ActivityEntry[]; onReload: () => void }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ category: 'valuation' as DealTerm['category'], label: '', value: '', notes: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+
+  const categories = [
+    { key: 'valuation' as const, label: 'Valuation', color: 'var(--success)' },
+    { key: 'structure' as const, label: 'Deal Structure', color: 'var(--accent)' },
+    { key: 'conditions' as const, label: 'Conditions', color: 'var(--warning)' },
+    { key: 'timeline' as const, label: 'Timeline', color: '#8b5cf6' },
+    { key: 'other' as const, label: 'Other Terms', color: 'var(--muted-foreground)' },
+  ];
+
+  const handleAdd = () => {
+    createDealTerm({ target_id: targetId, ...form });
+    setForm({ category: 'valuation', label: '', value: '', notes: '' });
+    setShowAdd(false);
+    onReload();
+  };
+
+  const handleInlineEdit = (id: string, newValue: string) => {
+    updateDealTerm(id, { value: newValue });
+    setEditingId(null);
+    onReload();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold">Deal Room</h2>
+        <button onClick={() => setShowAdd(true)} className="btn btn-primary btn-sm">
+          <Plus size={14} /> Add Term
+        </button>
+      </div>
+
+      {/* Deal terms by category */}
+      {categories.map(cat => {
+        const catTerms = terms.filter(t => t.category === cat.key);
+        if (catTerms.length === 0 && !showAdd) return null;
+        return (
+          <div key={cat.key} className="glass-card p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: cat.color }}>
+              {cat.label}
+            </h3>
+            {catTerms.length === 0 ? (
+              <p className="text-xs" style={{ color: 'var(--muted)' }}>No terms added yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {catTerms.map(term => (
+                  <div key={term.id} className="flex items-start gap-3 p-2 rounded" style={{ background: 'var(--background)' }}>
+                    <div className="flex-1">
+                      <div className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>{term.label}</div>
+                      {editingId === term.id ? (
+                        <input
+                          autoFocus
+                          value={editValue}
+                          onChange={e => setEditValue(e.target.value)}
+                          onBlur={() => handleInlineEdit(term.id, editValue)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleInlineEdit(term.id, editValue); if (e.key === 'Escape') setEditingId(null); }}
+                          className="w-full text-sm mt-0.5"
+                          style={{ padding: '0.125rem 0.25rem' }}
+                        />
+                      ) : (
+                        <div
+                          className="text-sm font-medium cursor-pointer"
+                          onClick={() => { setEditingId(term.id); setEditValue(term.value); }}
+                          title="Click to edit"
+                        >
+                          {term.value}
+                        </div>
+                      )}
+                      {term.notes && <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{term.notes}</p>}
+                    </div>
+                    <button onClick={() => { deleteDealTerm(term.id); onReload(); }} className="btn-ghost p-1 rounded flex-shrink-0">
+                      <Trash2 size={12} style={{ color: 'var(--muted)' }} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {terms.length === 0 && (
+        <div className="glass-card p-8 text-center" style={{ color: 'var(--muted)' }}>
+          <FileText size={32} className="mx-auto mb-2 opacity-50" />
+          <p className="text-sm">No deal terms tracked yet.</p>
+          <p className="text-xs mt-1">Add valuation, structure, conditions, and timeline terms to track deal progress.</p>
+        </div>
+      )}
+
+      {/* Recent activity */}
+      {activities.length > 0 && (
+        <div className="glass-card p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--muted-foreground)' }}>
+            Recent Activity
+          </h3>
+          <div className="space-y-2">
+            {activities.slice(0, 10).map(a => (
+              <div key={a.id} className="flex items-center gap-2 text-xs">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
+                <span style={{ color: 'var(--muted-foreground)' }}>{a.description}</span>
+                <span className="ml-auto" style={{ color: 'var(--muted)' }}>
+                  {new Date(a.created_at).toLocaleDateString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Add term modal */}
+      {showAdd && (
+        <div className="modal-overlay" onClick={() => setShowAdd(false)}>
+          <div className="modal-content max-w-md p-5 space-y-3" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold">Add Deal Term</h3>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Category</label>
+              <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as DealTerm['category'] }))} className="w-full text-sm">
+                {categories.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Label *</label>
+              <input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} className="w-full" placeholder="e.g. Enterprise Value, Earnout %, Exclusivity Period" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Value *</label>
+              <input value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} className="w-full" placeholder="e.g. $15M, 3x ARR, 60 days" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--muted-foreground)' }}>Notes</label>
+              <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="w-full" rows={2} />
+            </div>
+            <div className="flex justify-end gap-2 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+              <button onClick={() => setShowAdd(false)} className="btn btn-secondary">Cancel</button>
+              <button onClick={handleAdd} disabled={!form.label || !form.value} className="btn btn-primary">Add Term</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

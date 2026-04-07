@@ -9,6 +9,7 @@ import type {
   DDProject, DDWorkstream, DDTask, DDRisk, DDFinding,
   InformationRequest, DDDocument, ApprovalGate,
   DealStage, DealScore, DDStatus, RAGStatus,
+  ActivityEntry, ActivityType, DealTerm,
 } from './types';
 import { SCORE_CRITERIA, DD_WORKSTREAMS } from './types';
 import { DD_TASK_TEMPLATES } from './dd-templates';
@@ -644,6 +645,75 @@ export function recalcDDProgress(projectId: string): void {
   });
 }
 
+// --- Activity Log ---
+
+export function getActivities(limit = 50): ActivityEntry[] {
+  const all = getStore<ActivityEntry>('activities');
+  return all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, limit);
+}
+
+export function getActivitiesForTarget(targetId: string, limit = 30): ActivityEntry[] {
+  const all = getStore<ActivityEntry>('activities');
+  return all
+    .filter(a => a.target_id === targetId)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, limit);
+}
+
+export function logActivity(type: ActivityType, description: string, extra?: { target_id?: string; target_name?: string; project_id?: string; metadata?: Record<string, string> }): void {
+  const activities = getStore<ActivityEntry>('activities');
+  activities.push({
+    id: uuidv4(),
+    type,
+    description,
+    target_id: extra?.target_id,
+    target_name: extra?.target_name,
+    project_id: extra?.project_id,
+    metadata: extra?.metadata,
+    created_at: now(),
+  });
+  // Keep last 500 activities
+  const trimmed = activities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 500);
+  setStore('activities', trimmed);
+}
+
+// --- Deal Terms ---
+
+export function getDealTerms(targetId: string): DealTerm[] {
+  const all = getStore<DealTerm>('deal_terms');
+  return all.filter(dt => dt.target_id === targetId);
+}
+
+export function createDealTerm(data: Partial<DealTerm>): DealTerm {
+  const terms = getStore<DealTerm>('deal_terms');
+  const term: DealTerm = {
+    id: uuidv4(),
+    target_id: data.target_id || '',
+    category: data.category || 'other',
+    label: data.label || '',
+    value: data.value || '',
+    created_at: now(),
+    updated_at: now(),
+    ...data,
+  };
+  terms.push(term);
+  setStore('deal_terms', terms);
+  return term;
+}
+
+export function updateDealTerm(id: string, data: Partial<DealTerm>): void {
+  const terms = getStore<DealTerm>('deal_terms');
+  const idx = terms.findIndex(dt => dt.id === id);
+  if (idx !== -1) {
+    terms[idx] = { ...terms[idx], ...data, updated_at: now() };
+    setStore('deal_terms', terms);
+  }
+}
+
+export function deleteDealTerm(id: string): void {
+  setStore('deal_terms', getStore<DealTerm>('deal_terms').filter(dt => dt.id !== id));
+}
+
 // --- Export Utilities ---
 
 export function exportTargetsCSV(): string {
@@ -659,4 +729,50 @@ export function exportTargetsCSV(): string {
   ]);
 
   return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+}
+
+export function exportContactsCSV(): string {
+  const contacts = getContacts();
+  const targets = getTargets();
+  if (contacts.length === 0) return '';
+
+  const headers = ['Name', 'Title', 'Company', 'Email', 'Phone', 'LinkedIn', 'Primary', 'Notes'];
+  const rows = contacts.map(c => {
+    const target = targets.find(t => t.id === c.target_id);
+    return [
+      `"${c.name}"`, `"${c.title || ''}"`, `"${target?.name || ''}"`,
+      c.email || '', c.phone || '', c.linkedin || '',
+      c.is_primary ? 'Yes' : 'No', `"${(c.notes || '').replace(/"/g, '""')}"`,
+    ];
+  });
+
+  return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+}
+
+export function importContactsFromCSV(csv: string, targetId: string): number {
+  const lines = csv.trim().split('\n');
+  if (lines.length < 2) return 0;
+
+  let imported = 0;
+  // Skip header row
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    // Simple CSV parse (handles quoted fields)
+    const fields = line.match(/("(?:[^"]*(?:""[^"]*)*)"|[^,]*)/g)?.map(f => f.replace(/^"|"$/g, '').replace(/""/g, '"')) || [];
+    if (fields.length >= 1 && fields[0].trim()) {
+      createContact({
+        target_id: targetId,
+        name: fields[0].trim(),
+        title: fields[1]?.trim() || undefined,
+        email: fields[3]?.trim() || undefined,
+        phone: fields[4]?.trim() || undefined,
+        linkedin: fields[5]?.trim() || undefined,
+        is_primary: fields[6]?.toLowerCase() === 'yes',
+        notes: fields[7]?.trim() || undefined,
+      });
+      imported++;
+    }
+  }
+  return imported;
 }
