@@ -297,6 +297,59 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Pipeline Velocity */}
+      {activeTargets.length > 0 && (
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold flex items-center gap-2">
+              <TrendingUp size={16} style={{ color: 'var(--accent)' }} /> Pipeline Velocity
+            </h2>
+            <Link href="/analytics" className="text-xs font-medium" style={{ color: 'var(--accent)' }}>Details</Link>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {(() => {
+              const avgDaysInStage = activeTargets.length > 0
+                ? Math.round(activeTargets.reduce((sum, t) => sum + Math.floor((Date.now() - new Date(t.stage_entered_at).getTime()) / 86400000), 0) / activeTargets.length)
+                : 0;
+              const avgDaysTotal = activeTargets.length > 0
+                ? Math.round(activeTargets.reduce((sum, t) => sum + Math.floor((Date.now() - new Date(t.created_at).getTime()) / 86400000), 0) / activeTargets.length)
+                : 0;
+              const touchpointsThisMonth = touchpoints.filter(tp => {
+                const d = new Date(tp.date);
+                const now = new Date();
+                return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+              }).length;
+              const closedCount = targets.filter(t => t.stage === 'closed_won' || t.stage === 'closed_lost').length;
+              const winRate = closedCount > 0 ? Math.round((closedWon.length / closedCount) * 100) : 0;
+              return (
+                <>
+                  <div className="text-center p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+                    <div className="text-lg font-bold font-mono" style={{ color: avgDaysInStage > 30 ? 'var(--danger)' : avgDaysInStage > 14 ? 'var(--warning)' : 'var(--success)' }}>
+                      {avgDaysInStage}d
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--muted)' }}>Avg Days in Stage</div>
+                  </div>
+                  <div className="text-center p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+                    <div className="text-lg font-bold font-mono">{avgDaysTotal}d</div>
+                    <div className="text-xs" style={{ color: 'var(--muted)' }}>Avg Deal Age</div>
+                  </div>
+                  <div className="text-center p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+                    <div className="text-lg font-bold font-mono" style={{ color: 'var(--accent)' }}>{touchpointsThisMonth}</div>
+                    <div className="text-xs" style={{ color: 'var(--muted)' }}>Touchpoints (MTD)</div>
+                  </div>
+                  <div className="text-center p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+                    <div className="text-lg font-bold font-mono" style={{ color: winRate >= 25 ? 'var(--success)' : 'var(--warning)' }}>
+                      {winRate}%
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--muted)' }}>Win Rate</div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* Recent Activity */}
       <div className="glass-card p-5">
         <div className="flex items-center justify-between mb-4">

@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import { getTargets, getTouchpoints, getDDProjects } from '@/lib/db';
 import { DEAL_STAGES, VERTICALS } from '@/lib/types';
 import type { Target, Touchpoint, DDProject, DealStage } from '@/lib/types';
-import { TrendingUp, Clock, Users, DollarSign, Activity, BarChart3 } from 'lucide-react';
+import { getActivities } from '@/lib/db';
+import type { ActivityEntry } from '@/lib/types';
+import { TrendingUp, Clock, Users, DollarSign, Activity, BarChart3, ArrowRight } from 'lucide-react';
 
 function fmt(n: number, prefix = ''): string {
   if (n >= 1_000_000) return `${prefix}${(n / 1_000_000).toFixed(1)}M`;
@@ -16,11 +18,13 @@ export default function AnalyticsPage() {
   const [targets, setTargets] = useState<Target[]>([]);
   const [touchpoints, setTouchpoints] = useState<Touchpoint[]>([]);
   const [ddProjects, setDDProjects] = useState<DDProject[]>([]);
+  const [activities, setActivities] = useState<ActivityEntry[]>([]);
 
   useEffect(() => {
     setTargets(getTargets());
     setTouchpoints(getTouchpoints());
     setDDProjects(getDDProjects());
+    setActivities(getActivities());
   }, []);
 
   // Active targets (not closed)
@@ -349,6 +353,192 @@ export default function AnalyticsPage() {
               </div>
             );
           })}
+        </div>
+      </div>
+      {/* Stage Conversion Rates */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="glass-card p-5">
+          <h2 className="font-semibold mb-4">Stage Conversion Rates</h2>
+          <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>
+            Percentage of targets that advance from each stage to the next
+          </p>
+          <div className="space-y-3">
+            {DEAL_STAGES.slice(0, -2).map((s, i) => {
+              const nextStage = DEAL_STAGES[i + 1];
+              if (!nextStage || ['closed_won', 'closed_lost'].includes(nextStage.key)) return null;
+              const inStage = targets.filter(t => {
+                const stIdx = DEAL_STAGES.findIndex(st => st.key === t.stage);
+                return stIdx >= i;
+              }).length;
+              const advanced = targets.filter(t => {
+                const stIdx = DEAL_STAGES.findIndex(st => st.key === t.stage);
+                return stIdx > i;
+              }).length;
+              const convRate = inStage > 0 ? Math.round((advanced / inStage) * 100) : 0;
+              return (
+                <div key={s.key} className="flex items-center gap-3">
+                  <span className="text-xs w-20 truncate" style={{ color: 'var(--muted-foreground)' }}>{s.label}</span>
+                  <ArrowRight size={12} style={{ color: 'var(--muted)' }} />
+                  <span className="text-xs w-20 truncate" style={{ color: 'var(--muted-foreground)' }}>{nextStage.label}</span>
+                  <div className="flex-1 h-5 rounded overflow-hidden" style={{ background: 'var(--background)' }}>
+                    <div
+                      className="h-full rounded flex items-center px-2"
+                      style={{
+                        width: `${Math.max(convRate, convRate > 0 ? 8 : 0)}%`,
+                        background: convRate >= 50 ? 'var(--success)' : convRate >= 25 ? 'var(--warning)' : 'var(--danger)',
+                        transition: 'width 0.3s',
+                      }}
+                    >
+                      {convRate > 0 && <span className="text-xs font-bold text-white">{convRate}%</span>}
+                    </div>
+                  </div>
+                  <span className="text-xs font-mono w-12 text-right" style={{ color: 'var(--muted)' }}>{advanced}/{inStage}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Stage Transition History */}
+        <div className="glass-card p-5">
+          <h2 className="font-semibold mb-4">Recent Stage Transitions</h2>
+          <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>
+            Latest pipeline movements from the activity log
+          </p>
+          {(() => {
+            const transitions = activities
+              .filter(a => a.type === 'stage_changed')
+              .slice(0, 12);
+            if (transitions.length === 0) {
+              return <p className="text-sm" style={{ color: 'var(--muted)' }}>No stage transitions recorded yet.</p>;
+            }
+            return (
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {transitions.map(t => {
+                  const fromStage = DEAL_STAGES.find(s => s.label === t.metadata?.from || s.key === t.metadata?.from);
+                  const toStage = DEAL_STAGES.find(s => s.label === t.metadata?.to || s.key === t.metadata?.to);
+                  return (
+                    <div key={t.id} className="flex items-center gap-2 text-xs p-2 rounded" style={{ background: 'var(--background)' }}>
+                      <span className="font-medium truncate w-24">{t.target_name}</span>
+                      <span className="badge" style={{ background: `${fromStage?.color || 'var(--muted)'}20`, color: fromStage?.color || 'var(--muted)', fontSize: '0.6rem' }}>
+                        {t.metadata?.from || '?'}
+                      </span>
+                      <ArrowRight size={10} style={{ color: 'var(--muted)' }} />
+                      <span className="badge" style={{ background: `${toStage?.color || 'var(--muted)'}20`, color: toStage?.color || 'var(--muted)', fontSize: '0.6rem' }}>
+                        {t.metadata?.to || '?'}
+                      </span>
+                      <span className="ml-auto" style={{ color: 'var(--muted)' }}>
+                        {new Date(t.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* DD Progress Overview */}
+      {ddProjects.length > 0 && (
+        <div className="glass-card p-5">
+          <h2 className="font-semibold mb-4">Due Diligence Overview</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="text-center p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+              <div className="text-lg font-bold font-mono">{ddProjects.length}</div>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>Total Projects</div>
+            </div>
+            <div className="text-center p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+              <div className="text-lg font-bold font-mono" style={{ color: 'var(--accent)' }}>
+                {ddProjects.filter(p => p.status === 'in_progress').length}
+              </div>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>In Progress</div>
+            </div>
+            <div className="text-center p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+              <div className="text-lg font-bold font-mono" style={{ color: 'var(--success)' }}>
+                {ddProjects.filter(p => p.status === 'complete').length}
+              </div>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>Complete</div>
+            </div>
+            <div className="text-center p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+              <div className="text-lg font-bold font-mono">
+                {ddProjects.length > 0 ? Math.round(ddProjects.reduce((s, p) => s + p.overall_progress_pct, 0) / ddProjects.length) : 0}%
+              </div>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>Avg Progress</div>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {ddProjects.sort((a, b) => b.overall_progress_pct - a.overall_progress_pct).map(p => (
+              <div key={p.id} className="flex items-center gap-3">
+                <span className="text-xs w-32 truncate font-medium">{p.target_name}</span>
+                <span className="badge" style={{
+                  background: p.rag_status === 'green' ? 'rgba(16,185,129,0.2)' : p.rag_status === 'amber' ? 'rgba(245,158,11,0.2)' : p.rag_status === 'red' ? 'rgba(239,68,68,0.2)' : 'var(--background)',
+                  color: p.rag_status === 'green' ? 'var(--success)' : p.rag_status === 'amber' ? 'var(--warning)' : p.rag_status === 'red' ? 'var(--danger)' : 'var(--muted)',
+                  fontSize: '0.6rem',
+                }}>
+                  {p.phase}
+                </span>
+                <div className="flex-1 h-4 rounded overflow-hidden" style={{ background: 'var(--background)' }}>
+                  <div
+                    className="h-full rounded flex items-center px-2"
+                    style={{
+                      width: `${Math.max(p.overall_progress_pct, p.overall_progress_pct > 0 ? 4 : 0)}%`,
+                      background: p.rag_status === 'green' ? 'var(--success)' : p.rag_status === 'amber' ? 'var(--warning)' : p.rag_status === 'red' ? 'var(--danger)' : 'var(--accent)',
+                      transition: 'width 0.3s',
+                    }}
+                  >
+                    {p.overall_progress_pct > 10 && <span className="text-xs font-bold text-white">{p.overall_progress_pct}%</span>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Activity Heatmap - Weekly */}
+      <div className="glass-card p-5">
+        <h2 className="font-semibold mb-4">Activity Heatmap (12 Weeks)</h2>
+        <div className="overflow-x-auto">
+          <div className="flex gap-1 min-w-fit">
+            {(() => {
+              const weeks: { label: string; count: number }[] = [];
+              for (let i = 11; i >= 0; i--) {
+                const weekStart = new Date();
+                weekStart.setDate(weekStart.getDate() - (i * 7));
+                weekStart.setHours(0, 0, 0, 0);
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekEnd.getDate() + 7);
+                const count = activities.filter(a => {
+                  const d = new Date(a.created_at);
+                  return d >= weekStart && d < weekEnd;
+                }).length;
+                weeks.push({
+                  label: weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                  count,
+                });
+              }
+              const maxWeekActivity = Math.max(...weeks.map(w => w.count), 1);
+              return weeks.map((w, i) => (
+                <div key={i} className="flex flex-col items-center gap-1 flex-1" style={{ minWidth: 40 }}>
+                  <div
+                    className="w-full rounded"
+                    style={{
+                      height: 32,
+                      background: w.count === 0 ? 'var(--border)' : `rgba(59,130,246,${Math.max(0.15, (w.count / maxWeekActivity) * 0.9)})`,
+                      transition: 'background 0.3s',
+                    }}
+                    title={`${w.label}: ${w.count} activities`}
+                  >
+                    <div className="flex items-center justify-center h-full text-xs font-mono" style={{ color: w.count > 0 ? 'white' : 'var(--muted)' }}>
+                      {w.count || ''}
+                    </div>
+                  </div>
+                  <span className="text-[9px]" style={{ color: 'var(--muted)' }}>{w.label}</span>
+                </div>
+              ));
+            })()}
+          </div>
         </div>
       </div>
     </div>

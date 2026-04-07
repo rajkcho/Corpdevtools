@@ -239,6 +239,57 @@ export default function TargetDetailPage() {
         </div>
       )}
 
+      {/* Deal Timeline Summary */}
+      <div className="glass-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Deal Timeline</span>
+          <span className="text-xs font-mono" style={{ color: 'var(--muted)' }}>
+            {Math.floor((Date.now() - new Date(target.created_at).getTime()) / 86400000)}d since identified
+          </span>
+        </div>
+        <div className="flex items-center gap-1 text-xs">
+          {(() => {
+            const stageTransitions = activities
+              .filter(a => a.type === 'stage_changed')
+              .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+            const timelineEvents = [
+              { label: 'Created', date: target.created_at, color: 'var(--accent)' },
+              ...stageTransitions.map(t => ({
+                label: t.metadata?.to || 'Stage change',
+                date: t.created_at,
+                color: DEAL_STAGES.find(s => s.key === t.metadata?.to)?.color || 'var(--muted)',
+              })),
+            ];
+            if (target.first_contact_date) {
+              timelineEvents.push({ label: 'First Contact', date: target.first_contact_date, color: 'var(--success)' });
+            }
+            timelineEvents.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            return (
+              <div className="w-full overflow-x-auto">
+                <div className="flex items-center gap-0 min-w-fit">
+                  {timelineEvents.map((event, i) => (
+                    <div key={i} className="flex items-center">
+                      <div className="flex flex-col items-center" style={{ minWidth: 70 }}>
+                        <div className="w-3 h-3 rounded-full border-2" style={{ borderColor: event.color, background: i === timelineEvents.length - 1 ? event.color : 'var(--card)' }} />
+                        <div className="font-medium mt-1 text-center truncate w-full" style={{ color: event.color, fontSize: '0.6rem' }}>
+                          {event.label}
+                        </div>
+                        <div style={{ color: 'var(--muted)', fontSize: '0.55rem' }}>
+                          {new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </div>
+                      </div>
+                      {i < timelineEvents.length - 1 && (
+                        <div className="h-0.5 flex-1" style={{ background: 'var(--border)', minWidth: 20 }} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+
       {/* Description & Notes */}
       {(target.description || target.notes) && (
         <div className="glass-card p-4">
