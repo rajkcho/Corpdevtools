@@ -9,6 +9,7 @@ import type { Target, DealStage } from '@/lib/types';
 import Modal from '@/components/Modal';
 import TargetForm from '@/components/TargetForm';
 import BulkImport from '@/components/BulkImport';
+import DuplicateDetector from '@/components/DuplicateDetector';
 
 export default function TargetsPage() {
   const [targets, setTargets] = useState<Target[]>([]);
@@ -225,6 +226,9 @@ export default function TargetsPage() {
           <span>Scored: {filtered.filter(t => t.weighted_score).length}/{filtered.length}</span>
         </div>
       )}
+
+      {/* Duplicate Detection */}
+      <DuplicateDetector targets={targets} onMergeComplete={reload} />
 
       {/* Bulk Actions Bar */}
       {selectedIds.size > 0 && (

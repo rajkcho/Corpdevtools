@@ -28,6 +28,7 @@ import RadarChart from '@/components/RadarChart';
 import ScoringWizard from '@/components/ScoringWizard';
 import RelationshipTimeline from '@/components/RelationshipTimeline';
 import DealSuggestions from '@/components/DealSuggestions';
+import StakeholderMap from '@/components/StakeholderMap';
 
 const TOUCHPOINT_ICONS: Record<string, React.ReactNode> = {
   email: <Mail size={14} />,
@@ -308,7 +309,7 @@ export default function TargetDetailPage() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showScoringWizard, setShowScoringWizard] = useState(false);
-  const [activeTab, setActiveTab] = useState<'timeline' | 'notes' | 'contacts' | 'journal' | 'dealroom' | 'scoring' | 'swot' | 'integration'>('timeline');
+  const [activeTab, setActiveTab] = useState<'timeline' | 'notes' | 'contacts' | 'journal' | 'dealroom' | 'scoring' | 'swot' | 'stakeholders' | 'integration'>('timeline');
   const [ddProjectId, setDDProjectId] = useState<string | null>(null);
   const [dealTerms, setDealTerms] = useState<DealTerm[]>([]);
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
@@ -498,6 +499,21 @@ export default function TargetDetailPage() {
             title="One-page deal summary"
           >
             Summary
+          </button>
+          <button
+            onClick={async () => {
+              const { generateTargetProfile } = await import('@/lib/target-profile-export');
+              const cList = getContacts(id);
+              const tpList = getTouchpoints(id);
+              const ddProj = getDDProjectByTarget(id);
+              const html = generateTargetProfile(target, cList, tpList, ddProj || undefined);
+              const w = window.open('', '_blank');
+              if (w) { w.document.write(html); w.document.close(); }
+            }}
+            className="btn btn-secondary btn-sm"
+            title="Export full target profile"
+          >
+            <Printer size={14} /> Profile
           </button>
           <button onClick={() => setShowEditModal(true)} className="btn btn-secondary btn-sm">
             <Edit2 size={14} /> Edit
@@ -743,6 +759,7 @@ export default function TargetDetailPage() {
           { key: 'dealroom', label: 'Deal Room' },
           { key: 'scoring', label: 'Scoring' },
           { key: 'swot', label: 'SWOT' },
+          { key: 'stakeholders', label: 'Stakeholders' },
           ...(['closing', 'closed_won'].includes(target.stage) ? [{ key: 'integration' as const, label: '100-Day Plan' }] : []),
         ] as const).map(tab => (
           <button
@@ -1240,6 +1257,11 @@ export default function TargetDetailPage() {
       {/* SWOT Tab */}
       {activeTab === 'swot' && (
         <SWOTPanel targetId={id} targetName={target.name} />
+      )}
+
+      {/* Stakeholders Tab */}
+      {activeTab === 'stakeholders' && (
+        <StakeholderMap targetId={id} contacts={contacts} founderName={target.founder_name} />
       )}
 
       {/* Integration Tab */}

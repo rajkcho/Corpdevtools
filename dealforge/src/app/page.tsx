@@ -13,51 +13,85 @@ import type { Target as TargetType, DDProject, DDRisk, Touchpoint, Contact } fro
 import RAGDot from '@/components/RAGDot';
 import ProgressBar from '@/components/ProgressBar';
 
-function getDealHealth(
+// Expected cadence (days between touchpoints) per stage
+const STAGE_CADENCE: Record<string, number> = {
+  identified: 30, researching: 21, contacted: 10, nurturing: 14,
+  loi_submitted: 7, loi_signed: 5, due_diligence: 5, closing: 3,
+};
+
+interface DealHealthResult {
+  overall: number;
+  momentum: number;
+  completeness: number;
+  engagement: number;
+  risk: number;
+  color: string;
+  label: string;
+  lastActivityDate: string | null;
+}
+
+function computeDealHealth(
   target: TargetType,
   touchpoints: Touchpoint[],
   contacts: Contact[],
-): { overall: number; signals: ('green' | 'yellow' | 'red')[]; labels: string[] } {
-  const signals: ('green' | 'yellow' | 'red')[] = [];
-  const labels: string[] = [];
-
-  // 1. Momentum: how recently the stage changed
-  const daysInStage = Math.floor((Date.now() - new Date(target.stage_entered_at).getTime()) / 86400000);
-  if (daysInStage <= 14) { signals.push('green'); }
-  else if (daysInStage <= 45) { signals.push('yellow'); }
-  else { signals.push('red'); }
-  labels.push(`${daysInStage}d in stage`);
-
-  // 2. Completeness: has score, contacts, financials
-  const hasScore = !!target.weighted_score;
-  const hasContacts = contacts.filter(c => c.target_id === target.id).length > 0;
-  const hasFinancials = !!(target.revenue || target.arr);
-  const completeness = [hasScore, hasContacts, hasFinancials].filter(Boolean).length;
-  if (completeness >= 3) { signals.push('green'); }
-  else if (completeness >= 2) { signals.push('yellow'); }
-  else { signals.push('red'); }
-  labels.push(`${completeness}/3 data complete`);
-
-  // 3. Engagement: recent touchpoints
+  ddProjects: DDProject[],
+  ddRisks: DDRisk[],
+): DealHealthResult {
   const targetTPs = touchpoints.filter(tp => tp.target_id === target.id);
+  const sorted = [...targetTPs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const lastTP = sorted.length > 0 ? sorted[0] : null;
+  const lastActivityDate = lastTP ? lastTP.date : null;
+  const daysSinceLast = lastTP ? Math.floor((Date.now() - new Date(lastTP.date).getTime()) / 86400000) : 999;
+  const expectedCadence = STAGE_CADENCE[target.stage] || 14;
+
+  // Momentum (30%): days since last touchpoint vs expected cadence
+  let momentum: number;
+  if (daysSinceLast <= expectedCadence) {
+    momentum = 100;
+  } else if (daysSinceLast <= expectedCadence * 2) {
+    momentum = 70 - ((daysSinceLast - expectedCadence) / expectedCadence) * 40;
+  } else {
+    momentum = Math.max(0, 30 - ((daysSinceLast - expectedCadence * 2) / expectedCadence) * 30);
+  }
+  momentum = Math.max(0, Math.min(100, Math.round(momentum)));
+
+  // Completeness (25%): how many key fields are filled
+  const fields = [
+    !!(target.revenue),
+    !!(target.arr),
+    !!(contacts.filter(c => c.target_id === target.id).length > 0),
+    !!(target.weighted_score),
+    !!(target.description),
+    !!(target.customer_count),
+    !!(target.gross_margin_pct),
+    !!(target.employee_count),
+  ];
+  const completeness = Math.round((fields.filter(Boolean).length / fields.length) * 100);
+
+  // Engagement (25%): number of touchpoints in last 30 days
   const recentTP = targetTPs.filter(tp => Date.now() - new Date(tp.date).getTime() < 30 * 86400000).length;
-  if (recentTP >= 2) { signals.push('green'); }
-  else if (recentTP >= 1) { signals.push('yellow'); }
-  else { signals.push('red'); }
-  labels.push(`${recentTP} touchpoints (30d)`);
+  let engagement: number;
+  if (recentTP >= 4) engagement = 100;
+  else if (recentTP >= 2) engagement = 70;
+  else if (recentTP >= 1) engagement = 40;
+  else engagement = 0;
 
-  // 4. Risk: overdue follow-ups
-  const overdueFollowups = targetTPs.filter(tp => tp.follow_up_date && new Date(tp.follow_up_date) < new Date()).length;
-  if (overdueFollowups === 0) { signals.push('green'); }
-  else if (overdueFollowups <= 1) { signals.push('yellow'); }
-  else { signals.push('red'); }
-  labels.push(`${overdueFollowups} overdue follow-ups`);
+  // Risk (20%): inverse of open DD risks
+  const dd = ddProjects.find(p => p.target_id === target.id);
+  let risk = 100; // 100 = no risk = good
+  if (dd) {
+    const openRisks = ddRisks.filter(r => r.project_id === dd.id && (r.status === 'open' || r.status === 'mitigating'));
+    risk -= openRisks.length * 12;
+    if (dd.rag_status === 'red') risk -= 25;
+    else if (dd.rag_status === 'amber') risk -= 10;
+  }
+  risk = Math.max(0, Math.min(100, risk));
 
-  const scoreMap = { green: 100, yellow: 50, red: 10 };
-  const weights = [0.3, 0.25, 0.3, 0.15]; // momentum, completeness, engagement, risk
-  const overall = Math.round(signals.reduce((sum, s, i) => sum + scoreMap[s] * weights[i], 0));
+  const overall = Math.round(momentum * 0.30 + completeness * 0.25 + engagement * 0.25 + risk * 0.20);
+  const color = overall >= 70 ? 'var(--success)' : overall >= 40 ? 'var(--warning)' : 'var(--danger)';
+  const label = overall >= 70 ? 'Healthy' : overall >= 40 ? 'Needs Attention' : 'At Risk';
 
-  return { overall, signals, labels };
+  return { overall, momentum, completeness, engagement, risk, color, label, lastActivityDate };
 }
 
 export default function DashboardPage() {
@@ -283,76 +317,179 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Deal Health Cards */}
-      {activeTargets.length > 0 && (
-        <div className="glass-card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold flex items-center gap-2">
-              <TrendingUp size={16} style={{ color: 'var(--accent)' }} /> Deal Health Monitor
-            </h2>
-            <Link href="/targets" className="text-xs font-medium" style={{ color: 'var(--accent)' }}>View All</Link>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {activeTargets
-              .filter(t => !['identified'].includes(t.stage))
-              .sort((a, b) => {
-                // Sort by health: worst first
-                const scoreA = getDealHealth(a, touchpoints, allContacts);
-                const scoreB = getDealHealth(b, touchpoints, allContacts);
-                return scoreA.overall - scoreB.overall;
-              })
-              .slice(0, 8)
-              .map(t => {
-                const health = getDealHealth(t, touchpoints, allContacts);
-                const stage = DEAL_STAGES.find(s => s.key === t.stage);
-                return (
-                  <Link
-                    key={t.id}
-                    href={`/targets/${t.id}`}
-                    className="p-3 rounded-lg transition-colors border"
-                    style={{
-                      background: 'var(--background)',
-                      borderColor: health.overall >= 70 ? 'rgba(16,185,129,0.2)' : health.overall >= 40 ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.2)',
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium truncate flex-1">{t.name}</span>
-                      <span
-                        className="text-xs font-bold font-mono ml-2"
-                        style={{ color: health.overall >= 70 ? 'var(--success)' : health.overall >= 40 ? 'var(--warning)' : 'var(--danger)' }}
-                      >
-                        {health.overall}
-                      </span>
-                    </div>
-                    <div className="w-full h-1.5 rounded-full mb-2" style={{ background: 'var(--border)' }}>
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${health.overall}%`,
-                          background: health.overall >= 70 ? 'var(--success)' : health.overall >= 40 ? 'var(--warning)' : 'var(--danger)',
-                        }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="badge text-[9px]" style={{ background: `${stage?.color}20`, color: stage?.color }}>{stage?.label}</span>
-                      <div className="flex items-center gap-1">
-                        {health.signals.map((sig, i) => (
-                          <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: sig === 'green' ? 'var(--success)' : sig === 'yellow' ? 'var(--warning)' : 'var(--danger)' }} title={health.labels[i]} />
+      {/* Deal Health Overview */}
+      {activeTargets.length > 0 && (() => {
+        const healthData = activeTargets.map(t => ({
+          target: t,
+          health: computeDealHealth(t, touchpoints, allContacts, ddProjects, risks),
+        })).sort((a, b) => a.health.overall - b.health.overall);
+
+        // Attention Required items
+        const attentionItems: { priority: number; label: string; detail: string; href: string; color: string }[] = [];
+
+        for (const { target: t, health: h } of healthData) {
+          const targetTPs = touchpoints.filter(tp => tp.target_id === t.id);
+          const daysSinceLast = h.lastActivityDate
+            ? Math.floor((Date.now() - new Date(h.lastActivityDate).getTime()) / 86400000)
+            : null;
+
+          // No activity in 14+ days
+          if (daysSinceLast === null || daysSinceLast >= 14) {
+            attentionItems.push({
+              priority: daysSinceLast === null ? 0 : 1,
+              label: t.name,
+              detail: daysSinceLast === null ? 'No touchpoints recorded' : `${daysSinceLast}d since last activity`,
+              href: `/targets/${t.id}`,
+              color: 'var(--danger)',
+            });
+          }
+
+          // Missing critical fields
+          const tContacts = allContacts.filter(c => c.target_id === t.id);
+          if (tContacts.length === 0 && !['identified', 'researching'].includes(t.stage)) {
+            attentionItems.push({ priority: 1, label: t.name, detail: 'No contacts added', href: `/targets/${t.id}`, color: 'var(--warning)' });
+          }
+          if (!t.weighted_score && !['identified'].includes(t.stage)) {
+            attentionItems.push({ priority: 2, label: t.name, detail: 'No deal score assigned', href: `/targets/${t.id}`, color: 'var(--warning)' });
+          }
+
+          // Overdue follow-ups
+          const overdueFU = targetTPs.filter(tp => tp.follow_up_date && new Date(tp.follow_up_date) < new Date());
+          for (const fu of overdueFU) {
+            const daysOverdue = Math.floor((Date.now() - new Date(fu.follow_up_date!).getTime()) / 86400000);
+            attentionItems.push({ priority: 0, label: t.name, detail: `Follow-up ${daysOverdue}d overdue: ${fu.subject}`, href: `/targets/${t.id}`, color: 'var(--danger)' });
+          }
+        }
+
+        // DD projects with red RAG
+        for (const p of ddProjects) {
+          if (p.rag_status === 'red' && p.status !== 'complete') {
+            attentionItems.push({ priority: 0, label: p.target_name, detail: 'DD project flagged RED', href: `/diligence/${p.id}`, color: 'var(--danger)' });
+          }
+        }
+
+        attentionItems.sort((a, b) => a.priority - b.priority);
+        // Deduplicate by label+detail
+        const seen = new Set<string>();
+        const uniqueAttention = attentionItems.filter(a => {
+          const key = `${a.label}::${a.detail}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        const dimColor = (v: number) => v >= 70 ? 'var(--success)' : v >= 40 ? 'var(--warning)' : 'var(--danger)';
+
+        return (
+          <div className="space-y-6">
+            {/* Deal Health Cards */}
+            <div className="glass-card p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-semibold flex items-center gap-2">
+                  <TrendingUp size={16} style={{ color: 'var(--accent)' }} /> Deal Health Overview
+                </h2>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                    Avg:{' '}
+                    <span className="font-mono font-bold" style={{
+                      color: dimColor(Math.round(healthData.reduce((s, d) => s + d.health.overall, 0) / healthData.length)),
+                    }}>
+                      {Math.round(healthData.reduce((s, d) => s + d.health.overall, 0) / healthData.length)}
+                    </span>
+                  </span>
+                  {healthData.filter(d => d.health.overall < 40).length > 0 && (
+                    <span className="badge" style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--danger)' }}>
+                      {healthData.filter(d => d.health.overall < 40).length} at risk
+                    </span>
+                  )}
+                  <Link href="/targets" className="text-xs font-medium" style={{ color: 'var(--accent)' }}>View All</Link>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {healthData.slice(0, 12).map(({ target: t, health: h }) => {
+                  const stage = DEAL_STAGES.find(s => s.key === t.stage);
+                  return (
+                    <Link
+                      key={t.id}
+                      href={`/targets/${t.id}`}
+                      className="p-3 rounded-lg transition-colors border"
+                      style={{
+                        background: 'var(--background)',
+                        borderColor: h.overall >= 70 ? 'rgba(16,185,129,0.2)' : h.overall >= 40 ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.2)',
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-medium truncate flex-1">{t.name}</span>
+                        <span className="text-xs font-bold font-mono ml-2" style={{ color: h.color }}>{h.overall}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <span className="badge text-[9px]" style={{ background: `${stage?.color}20`, color: stage?.color }}>{stage?.label}</span>
+                      </div>
+                      {/* Composite health bar */}
+                      <div className="w-full h-1.5 rounded-full mb-2" style={{ background: 'var(--border)' }}>
+                        <div className="h-full rounded-full transition-all" style={{ width: `${h.overall}%`, background: h.color }} />
+                      </div>
+                      {/* 4-dimension mini-bars */}
+                      <div className="grid grid-cols-4 gap-1 mb-2">
+                        {([
+                          { val: h.momentum, tip: 'Momentum' },
+                          { val: h.completeness, tip: 'Completeness' },
+                          { val: h.engagement, tip: 'Engagement' },
+                          { val: h.risk, tip: 'Risk' },
+                        ] as const).map((dim, i) => (
+                          <div key={i} title={`${dim.tip}: ${dim.val}`} className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                            <div className="h-full rounded-full" style={{ width: `${dim.val}%`, background: dimColor(dim.val) }} />
+                          </div>
                         ))}
                       </div>
-                    </div>
-                  </Link>
-                );
-              })}
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px]" style={{ color: 'var(--muted)' }}>
+                          {h.lastActivityDate
+                            ? `Last: ${new Date(h.lastActivityDate).toLocaleDateString()}`
+                            : 'No activity'}
+                        </span>
+                        <span className="text-[10px]" style={{ color: h.color }}>{h.label}</span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-4 mt-3 text-[10px]" style={{ color: 'var(--muted)' }}>
+                <span>Bars (L-R): Momentum (30%) · Completeness (25%) · Engagement (25%) · Risk (20%)</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--success)' }} /> &gt;70</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--warning)' }} /> 40-70</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--danger)' }} /> &lt;40</span>
+              </div>
+            </div>
+
+            {/* Attention Required */}
+            {uniqueAttention.length > 0 && (
+              <div className="glass-card p-5" style={{ borderColor: 'rgba(239,68,68,0.2)' }}>
+                <h2 className="font-semibold mb-3 flex items-center gap-2">
+                  <AlertTriangle size={16} style={{ color: 'var(--danger)' }} /> Attention Required ({uniqueAttention.length})
+                </h2>
+                <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>
+                  Priority-sorted issues across your active pipeline
+                </p>
+                <div className="space-y-1.5">
+                  {uniqueAttention.slice(0, 10).map((item, i) => (
+                    <Link
+                      key={i}
+                      href={item.href}
+                      className="flex items-center gap-3 p-2 rounded-lg text-sm transition-colors"
+                      style={{ background: 'var(--background)' }}
+                    >
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: item.color }} />
+                      <span className="font-medium flex-shrink-0" style={{ minWidth: 100 }}>{item.label}</span>
+                      <span className="flex-1 truncate" style={{ color: 'var(--muted-foreground)' }}>{item.detail}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-4 mt-3 text-[10px]" style={{ color: 'var(--muted)' }}>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--success)' }} /> Momentum</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--warning)' }} /> Completeness</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} /> Engagement</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--danger)' }} /> Risk</span>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Second Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -730,117 +867,6 @@ export default function DashboardPage() {
                   No contacts added yet. Add contacts to track relationships.
                 </p>
               )}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Deal Health Scorecard */}
-      {activeTargets.length > 0 && (() => {
-        const dealHealth = activeTargets
-          .filter(t => !['identified'].includes(t.stage))
-          .map(t => {
-            const daysInStage = Math.floor((Date.now() - new Date(t.stage_entered_at).getTime()) / 86400000);
-            const tps = touchpoints.filter(tp => tp.target_id === t.id);
-            const lastTouchpoint = tps.length > 0 ? tps.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] : null;
-            const daysSinceContact = lastTouchpoint ? Math.floor((Date.now() - new Date(lastTouchpoint.date).getTime()) / 86400000) : null;
-            const contacts = allContacts.filter(c => c.target_id === t.id);
-            const dd = ddProjects.find(p => p.target_id === t.id);
-            const targetRisks = risks.filter(r => dd && r.project_id === dd.id && r.status === 'open');
-
-            // Score components (0-100 each)
-            let momentum = 100;
-            if (daysInStage > 60) momentum -= 50;
-            else if (daysInStage > 30) momentum -= 25;
-            if (daysSinceContact === null) momentum -= 30;
-            else if (daysSinceContact > 30) momentum -= 40;
-            else if (daysSinceContact > 14) momentum -= 20;
-            momentum = Math.max(0, momentum);
-
-            let completeness = 0;
-            if (t.weighted_score) completeness += 25;
-            if (contacts.length > 0) completeness += 25;
-            if (t.revenue || t.arr) completeness += 25;
-            if (tps.length >= 2) completeness += 25;
-
-            let riskLevel = 100;
-            if (targetRisks.length > 0) riskLevel -= targetRisks.length * 15;
-            if (dd?.rag_status === 'red') riskLevel -= 30;
-            else if (dd?.rag_status === 'amber') riskLevel -= 15;
-            riskLevel = Math.max(0, riskLevel);
-
-            const overall = Math.round((momentum * 0.4 + completeness * 0.3 + riskLevel * 0.3));
-            const healthColor = overall >= 70 ? 'var(--success)' : overall >= 40 ? 'var(--warning)' : 'var(--danger)';
-            const healthLabel = overall >= 70 ? 'Healthy' : overall >= 40 ? 'Needs Attention' : 'At Risk';
-
-            return { target: t, overall, momentum, completeness, riskLevel, healthColor, healthLabel, daysInStage, daysSinceContact };
-          })
-          .sort((a, b) => a.overall - b.overall);
-
-        if (dealHealth.length === 0) return null;
-
-        const avgHealth = Math.round(dealHealth.reduce((s, d) => s + d.overall, 0) / dealHealth.length);
-        const atRisk = dealHealth.filter(d => d.overall < 40).length;
-
-        return (
-          <div className="glass-card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold flex items-center gap-2">
-                <TrendingUp size={16} style={{ color: 'var(--accent)' }} /> Deal Health Scorecard
-              </h2>
-              <div className="flex items-center gap-3">
-                <span className="text-xs" style={{ color: 'var(--muted)' }}>
-                  Avg Health: <span className="font-mono font-bold" style={{ color: avgHealth >= 70 ? 'var(--success)' : avgHealth >= 40 ? 'var(--warning)' : 'var(--danger)' }}>{avgHealth}</span>
-                </span>
-                {atRisk > 0 && (
-                  <span className="badge" style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--danger)' }}>
-                    {atRisk} at risk
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="space-y-2">
-              {dealHealth.slice(0, 8).map(d => (
-                <Link key={d.target.id} href={`/targets/${d.target.id}`}
-                  className="flex items-center gap-3 p-2.5 rounded-lg text-sm transition-colors"
-                  style={{ background: 'var(--background)' }}
-                >
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                    style={{ background: `${d.healthColor}15`, color: d.healthColor, border: `2px solid ${d.healthColor}` }}
-                  >
-                    {d.overall}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{d.target.name}</div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px]" style={{ color: 'var(--muted)' }}>{d.healthLabel}</span>
-                      <span className="text-[10px]" style={{ color: 'var(--muted)' }}>·</span>
-                      <span className="text-[10px]" style={{ color: d.daysInStage > 30 ? 'var(--warning)' : 'var(--muted)' }}>{d.daysInStage}d in stage</span>
-                      {d.daysSinceContact !== null && (
-                        <>
-                          <span className="text-[10px]" style={{ color: 'var(--muted)' }}>·</span>
-                          <span className="text-[10px]" style={{ color: d.daysSinceContact > 14 ? 'var(--warning)' : 'var(--muted)' }}>{d.daysSinceContact}d since contact</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <div title="Momentum" className="w-8 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
-                      <div className="h-full rounded-full" style={{ width: `${d.momentum}%`, background: d.momentum >= 70 ? 'var(--success)' : d.momentum >= 40 ? 'var(--warning)' : 'var(--danger)' }} />
-                    </div>
-                    <div title="Completeness" className="w-8 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
-                      <div className="h-full rounded-full" style={{ width: `${d.completeness}%`, background: d.completeness >= 75 ? 'var(--success)' : d.completeness >= 50 ? 'var(--warning)' : 'var(--danger)' }} />
-                    </div>
-                    <div title="Risk Level" className="w-8 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
-                      <div className="h-full rounded-full" style={{ width: `${d.riskLevel}%`, background: d.riskLevel >= 70 ? 'var(--success)' : d.riskLevel >= 40 ? 'var(--warning)' : 'var(--danger)' }} />
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-            <div className="flex items-center gap-4 mt-3 text-[10px]" style={{ color: 'var(--muted)' }}>
-              <span>Bars: Momentum · Completeness · Risk</span>
-              <span>Score: 40% momentum + 30% completeness + 30% risk profile</span>
             </div>
           </div>
         );
