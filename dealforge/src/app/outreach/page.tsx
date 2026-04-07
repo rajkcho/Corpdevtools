@@ -590,6 +590,102 @@ export default function OutreachPage() {
           </div>
         )}
       </div>
+      {/* Outreach Cadence Planner */}
+      <div className="glass-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold flex items-center gap-2">
+            <Mail size={16} style={{ color: 'var(--accent)' }} /> Outreach Pipeline
+          </h2>
+        </div>
+        <p className="text-xs mb-4" style={{ color: 'var(--muted-foreground)' }}>
+          Track outreach status per target. See who needs initial contact, follow-up, or has gone cold.
+        </p>
+        {(() => {
+          const allTps = getTouchpoints();
+          const activeTargets = targets.filter(t => !['closed_won', 'closed_lost'].includes(t.stage));
+
+          const targetOutreach = activeTargets.map(t => {
+            const tps = allTps.filter(tp => tp.target_id === t.id && tp.type === 'email');
+            const lastEmail = tps.length > 0 ? tps.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] : null;
+            const daysSinceContact = lastEmail ? Math.floor((Date.now() - new Date(lastEmail.date).getTime()) / 86400000) : null;
+            const pendingFollowUp = allTps.find(tp => tp.target_id === t.id && tp.follow_up_date && new Date(tp.follow_up_date) < new Date());
+
+            let status: 'never_contacted' | 'recent' | 'warming' | 'cold' | 'has_followup';
+            if (pendingFollowUp) status = 'has_followup';
+            else if (!lastEmail) status = 'never_contacted';
+            else if (daysSinceContact !== null && daysSinceContact <= 7) status = 'recent';
+            else if (daysSinceContact !== null && daysSinceContact <= 30) status = 'warming';
+            else status = 'cold';
+
+            return { target: t, lastEmail, daysSinceContact, emailCount: tps.length, status, pendingFollowUp };
+          }).sort((a, b) => {
+            const order = { has_followup: 0, cold: 1, never_contacted: 2, warming: 3, recent: 4 };
+            return (order[a.status] || 0) - (order[b.status] || 0);
+          });
+
+          const statusConfig = {
+            never_contacted: { label: 'Never Contacted', color: 'var(--muted)', bg: 'var(--background)' },
+            recent: { label: 'Recently Contacted', color: 'var(--success)', bg: 'rgba(16,185,129,0.05)' },
+            warming: { label: 'Needs Follow-up', color: 'var(--warning)', bg: 'rgba(245,158,11,0.05)' },
+            cold: { label: 'Gone Cold', color: 'var(--danger)', bg: 'rgba(239,68,68,0.05)' },
+            has_followup: { label: 'Overdue Follow-up', color: 'var(--danger)', bg: 'rgba(239,68,68,0.08)' },
+          };
+
+          // Summary counts
+          const counts = targetOutreach.reduce((acc, to) => {
+            acc[to.status] = (acc[to.status] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+
+          return (
+            <div className="space-y-3">
+              {/* Summary chips */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {Object.entries(counts).map(([status, count]) => {
+                  const cfg = statusConfig[status as keyof typeof statusConfig];
+                  return (
+                    <span key={status} className="badge" style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}20` }}>
+                      {count} {cfg.label}
+                    </span>
+                  );
+                })}
+              </div>
+
+              {/* Target list */}
+              <div className="space-y-1">
+                {targetOutreach.slice(0, 12).map(({ target: t, lastEmail, daysSinceContact, emailCount, status }) => {
+                  const cfg = statusConfig[status];
+                  return (
+                    <div key={t.id} className="flex items-center gap-3 p-2 rounded text-xs" style={{ background: cfg.bg }}>
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: cfg.color }} />
+                      <span className="font-medium w-32 truncate">{t.name}</span>
+                      <span className="badge" style={{ background: cfg.bg, color: cfg.color, fontSize: '0.6rem' }}>
+                        {cfg.label}
+                      </span>
+                      <span className="flex-1" />
+                      {emailCount > 0 && (
+                        <span style={{ color: 'var(--muted)' }}>{emailCount} email{emailCount > 1 ? 's' : ''}</span>
+                      )}
+                      {daysSinceContact !== null && (
+                        <span className="font-mono" style={{ color: cfg.color }}>{daysSinceContact}d ago</span>
+                      )}
+                      {!lastEmail && (
+                        <button
+                          onClick={() => { setSelectedTarget(t.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                          className="btn btn-ghost btn-sm"
+                          style={{ fontSize: '0.6rem', color: 'var(--accent)' }}
+                        >
+                          Draft Email
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+      </div>
     </div>
   );
 }

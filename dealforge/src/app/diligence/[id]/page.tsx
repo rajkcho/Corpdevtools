@@ -216,6 +216,68 @@ export default function DDProjectDetailPage() {
         </div>
       </div>
 
+      {/* DD Timeline */}
+      <div className="glass-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-medium">Due Diligence Timeline</span>
+          <span className="text-xs font-mono" style={{ color: 'var(--muted)' }}>
+            Day {Math.floor((Date.now() - new Date(project.start_date).getTime()) / 86400000)}
+            {project.target_close_date && ` / ${Math.floor((new Date(project.target_close_date).getTime() - new Date(project.start_date).getTime()) / 86400000)}d target`}
+          </span>
+        </div>
+        {/* Timeline bar */}
+        <div className="relative">
+          <div className="h-2 rounded-full" style={{ background: 'var(--background)' }}>
+            {project.target_close_date ? (() => {
+              const total = new Date(project.target_close_date).getTime() - new Date(project.start_date).getTime();
+              const elapsed = Date.now() - new Date(project.start_date).getTime();
+              const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
+              const isOverdue = pct > 100;
+              return (
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(pct, 100)}%`,
+                    background: isOverdue ? 'var(--danger)' : pct > 80 ? 'var(--warning)' : 'var(--accent)',
+                  }}
+                />
+              );
+            })() : (
+              <div className="h-full rounded-full" style={{ width: `${project.overall_progress_pct}%`, background: 'var(--accent)' }} />
+            )}
+          </div>
+          {/* Phase markers */}
+          <div className="flex justify-between mt-2">
+            {gates.filter(g => g.status === 'approved').map(g => (
+              <div key={g.id} className="text-center">
+                <div className="w-3 h-3 rounded-full mx-auto" style={{ background: 'var(--success)' }} />
+                <div className="text-[10px] mt-0.5 capitalize" style={{ color: 'var(--success)' }}>{g.phase}</div>
+                {g.decision_date && (
+                  <div className="text-[9px]" style={{ color: 'var(--muted)' }}>
+                    {new Date(g.decision_date).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Key dates */}
+        <div className="flex items-center gap-4 mt-3 text-xs" style={{ color: 'var(--muted)' }}>
+          <span>Started: {new Date(project.start_date).toLocaleDateString()}</span>
+          {project.target_close_date && (
+            <span style={{ color: new Date(project.target_close_date) < new Date() ? 'var(--danger)' : 'var(--muted-foreground)' }}>
+              Target Close: {new Date(project.target_close_date).toLocaleDateString()}
+              {new Date(project.target_close_date) < new Date() && ' (OVERDUE)'}
+            </span>
+          )}
+          {project.actual_close_date && (
+            <span style={{ color: 'var(--success)' }}>
+              Closed: {new Date(project.actual_close_date).toLocaleDateString()}
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* Executive Summary */}
       <details className="glass-card">
         <summary className="p-4 cursor-pointer text-sm font-medium flex items-center gap-2" style={{ color: 'var(--muted-foreground)' }}>
