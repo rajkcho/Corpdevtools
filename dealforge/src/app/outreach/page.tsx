@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getTargets, getContacts, getTouchpoints, createTouchpoint, logActivity } from '@/lib/db';
 import type { Target, Contact, Touchpoint } from '@/lib/types';
-import { Mail, Copy, Check, ChevronDown, Edit2, Clock, Trash2, Send } from 'lucide-react';
+import { Mail, Copy, Check, ChevronDown, Edit2, Clock, Trash2, Send, Plus, Save } from 'lucide-react';
 
 interface EmailTemplate {
   id: string;
@@ -163,6 +163,16 @@ Best,
   },
 ];
 
+function getCustomTemplates(): EmailTemplate[] {
+  if (typeof window === 'undefined') return [];
+  const raw = localStorage.getItem('dealforge_custom_templates');
+  return raw ? JSON.parse(raw) : [];
+}
+
+function saveCustomTemplates(templates: EmailTemplate[]): void {
+  localStorage.setItem('dealforge_custom_templates', JSON.stringify(templates));
+}
+
 export default function OutreachPage() {
   const [targets, setTargets] = useState<Target[]>([]);
   const [selectedTarget, setSelectedTarget] = useState<string>('');
@@ -177,9 +187,13 @@ export default function OutreachPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [outreachLog, setOutreachLog] = useState<Touchpoint[]>([]);
   const [showLog, setShowLog] = useState(false);
+  const [customTemplates, setCustomTemplates] = useState<EmailTemplate[]>([]);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
 
   useEffect(() => {
     setTargets(getTargets());
+    setCustomTemplates(getCustomTemplates());
     // Load all email touchpoints as outreach log
     const allTps = getTouchpoints();
     setOutreachLog(allTps.filter(tp => tp.type === 'email').slice(0, 20));
@@ -200,7 +214,8 @@ export default function OutreachPage() {
     }
   }, [yourName, yourTitle, yourCompany]);
 
-  const template = TEMPLATES.find(t => t.id === selectedTemplate)!;
+  const allTemplates = [...TEMPLATES, ...customTemplates];
+  const template = allTemplates.find(t => t.id === selectedTemplate) || TEMPLATES[0];
   const target = targets.find(t => t.id === selectedTarget);
 
   // Get contacts for selected target
@@ -294,7 +309,7 @@ export default function OutreachPage() {
 
           {/* Template selection */}
           <div className="glass-card p-4 space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>Template</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>Templates</h3>
             {TEMPLATES.map(t => (
               <button
                 key={t.id}
@@ -309,6 +324,37 @@ export default function OutreachPage() {
                 <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{t.description}</div>
               </button>
             ))}
+            {customTemplates.length > 0 && (
+              <>
+                <div className="text-xs font-semibold uppercase tracking-wider pt-2" style={{ color: 'var(--muted)' }}>Custom</div>
+                {customTemplates.map(t => (
+                  <div key={t.id} className="flex items-center gap-1">
+                    <button
+                      onClick={() => { setSelectedTemplate(t.id); setIsEditing(false); }}
+                      className="flex-1 text-left p-2.5 rounded-lg transition-colors"
+                      style={{
+                        background: selectedTemplate === t.id ? 'var(--accent-muted)' : 'var(--background)',
+                        borderLeft: selectedTemplate === t.id ? '3px solid var(--accent)' : '3px solid transparent',
+                      }}
+                    >
+                      <div className="text-sm font-medium">{t.name}</div>
+                      <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{t.description}</div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        const updated = customTemplates.filter(ct => ct.id !== t.id);
+                        setCustomTemplates(updated);
+                        saveCustomTemplates(updated);
+                        if (selectedTemplate === t.id) setSelectedTemplate(TEMPLATES[0].id);
+                      }}
+                      className="btn-ghost p-1 rounded flex-shrink-0"
+                    >
+                      <Trash2 size={12} style={{ color: 'var(--muted)' }} />
+                    </button>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </div>
 
@@ -393,9 +439,55 @@ export default function OutreachPage() {
               </button>
             )}
             {isEditing && (
-              <button onClick={() => setIsEditing(false)} className="btn btn-ghost">
-                Reset to Template
-              </button>
+              <>
+                <button onClick={() => setIsEditing(false)} className="btn btn-ghost">
+                  Reset to Template
+                </button>
+                <button
+                  onClick={() => setShowSaveTemplate(true)}
+                  className="btn btn-secondary"
+                >
+                  <Save size={14} /> Save as Template
+                </button>
+              </>
+            )}
+            {showSaveTemplate && (
+              <div className="w-full flex items-center gap-2 p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+                <input
+                  value={newTemplateName}
+                  onChange={e => setNewTemplateName(e.target.value)}
+                  placeholder="Template name..."
+                  className="flex-1"
+                  autoFocus
+                />
+                <button
+                  onClick={() => {
+                    if (!newTemplateName.trim()) return;
+                    const newTemplate: EmailTemplate = {
+                      id: `custom_${Date.now()}`,
+                      name: newTemplateName,
+                      subject: customSubject,
+                      body: customBody,
+                      stage: 'nurturing',
+                      description: 'Custom template',
+                    };
+                    const updated = [...customTemplates, newTemplate];
+                    setCustomTemplates(updated);
+                    saveCustomTemplates(updated);
+                    setSelectedTemplate(newTemplate.id);
+                    setShowSaveTemplate(false);
+                    setNewTemplateName('');
+                    setIsEditing(false);
+                  }}
+                  disabled={!newTemplateName.trim()}
+                  className="btn btn-primary btn-sm"
+                >
+                  Save
+                </button>
+                <button onClick={() => setShowSaveTemplate(false)} className="btn btn-ghost btn-sm">
+                  Cancel
+                </button>
+              </div>
             )}
           </div>
         </div>
