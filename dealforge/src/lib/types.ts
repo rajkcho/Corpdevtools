@@ -54,7 +54,7 @@ export const VERTICALS = [
 
 export type Vertical = (typeof VERTICALS)[number];
 
-// Harris acquisition criteria — 6 dimensions scored 1-5
+// VMS acquisition criteria — 6 dimensions scored 1-5
 export interface DealScore {
   diversified_customers: number;   // 1-5
   low_churn: number;               // 1-5

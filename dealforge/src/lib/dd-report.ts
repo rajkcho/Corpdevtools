@@ -55,7 +55,7 @@ export function generateDDReport(projectId: string): string {
     if (target.customer_count) report += line(`Customers: ${target.customer_count}`);
     if (target.employee_count) report += line(`Employees: ${target.employee_count}`);
     if (target.asking_price) report += line(`Asking Price: $${(target.asking_price / 1_000_000).toFixed(1)}M`);
-    if (target.weighted_score) report += line(`Harris Score: ${target.weighted_score.toFixed(1)} / 5.0`);
+    if (target.weighted_score) report += line(`Acquisition Score: ${target.weighted_score.toFixed(1)} / 5.0`);
   }
 
   // Phase gates

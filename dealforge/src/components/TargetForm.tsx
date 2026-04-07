@@ -208,7 +208,7 @@ export default function TargetForm({ initial, onSubmit, onCancel, submitLabel = 
       {tab === 'scoring' && (
         <div className="space-y-4">
           <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-            Score each criterion 1-5 based on Harris/Constellation acquisition criteria
+            Score each criterion 1-5 based on VMS acquisition criteria
           </p>
           {SCORE_CRITERIA.map(c => (
             <div key={c.key}>

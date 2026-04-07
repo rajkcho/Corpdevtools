@@ -97,7 +97,7 @@ const SAMPLE_TARGETS: {
 ];
 
 const TOUCHPOINT_TEMPLATES = [
-  { type: 'email' as const, subject: 'Initial outreach email', summary: 'Sent introductory email explaining Harris acquisition model and permanent ownership philosophy.' },
+  { type: 'email' as const, subject: 'Initial outreach email', summary: 'Sent introductory email explaining our acquisition model and permanent ownership philosophy.' },
   { type: 'call' as const, subject: 'Intro call with founder', summary: 'Discussed company history, growth trajectory, and founder motivations. Founder expressed interest in learning more about our approach.' },
   { type: 'meeting' as const, subject: 'In-person meeting', summary: 'Met with management team. Toured office. Discussed product roadmap and customer base in detail.' },
   { type: 'email' as const, subject: 'Follow-up with CIM request', summary: 'Requested confidential information memorandum and high-level financials for initial evaluation.' },

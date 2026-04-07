@@ -152,7 +152,7 @@ export default function ComparePage() {
                   ))}
 
                   {/* Section: Scoring */}
-                  <tr><td colSpan={selectedTargets.length + 2} className="px-3 pt-4 pb-1"><span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>Harris Criteria (1-5)</span></td></tr>
+                  <tr><td colSpan={selectedTargets.length + 2} className="px-3 pt-4 pb-1"><span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>VMS Acquisition Criteria (1-5)</span></td></tr>
                   {SCORE_ROWS.map(row => (
                     <MetricRowComponent key={row.key} row={row} targets={selectedTargets} getHighlight={getHighlight} hasAddColumn={selectedTargets.length < 5} />
                   ))}

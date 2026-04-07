@@ -302,7 +302,7 @@ export default function TargetDetailPage() {
       {/* Scoring Tab */}
       {activeTab === 'scoring' && (
         <div className="glass-card p-5">
-          <h2 className="font-semibold mb-4">Harris Acquisition Scorecard</h2>
+          <h2 className="font-semibold mb-4">VMS Acquisition Scorecard</h2>
           <div className="grid gap-4">
             {SCORE_CRITERIA.map(c => {
               const val = target.score?.[c.key] || 0;

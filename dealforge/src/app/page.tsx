@@ -202,7 +202,7 @@ export default function DashboardPage() {
               {targets.length > 0 && (
                 <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
                   {sourceBreakdown.find(s => s.source === 'proprietary')
-                    ? `${Math.round(((sourceBreakdown.find(s => s.source === 'proprietary')?.count || 0) / targets.length) * 100)}% proprietary (CSU target: 60-70%)`
+                    ? `${Math.round(((sourceBreakdown.find(s => s.source === 'proprietary')?.count || 0) / targets.length) * 100)}% proprietary (VMS benchmark: 60-70%)`
                     : 'Track proprietary vs broker sourcing ratio'}
                 </p>
               )}

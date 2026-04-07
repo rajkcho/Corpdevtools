@@ -88,7 +88,7 @@ export interface MeetingAnalysis {
 }
 
 export async function analyzeMeetingNotes(notes: string, targetName: string): Promise<MeetingAnalysis> {
-  const systemPrompt = `You are an M&A analyst at a serial acquirer of vertical market software companies (similar to Constellation Software / Harris Computer). You analyze meeting notes to extract actionable intelligence.
+  const systemPrompt = `You are an M&A analyst at a serial acquirer of vertical market software (VMS) companies. You analyze meeting notes to extract actionable intelligence.
 
 You MUST respond with valid JSON matching this exact structure:
 {
@@ -161,7 +161,7 @@ export async function assessRisks(targetData: {
   risks: { title: string; description: string; category: string; impact: number; probability: number; mitigation: string }[];
   overall_assessment: string;
 }> {
-  const systemPrompt = `You are an M&A risk analyst at a Constellation Software-style serial acquirer. Based on limited target company data, identify potential risks that should be investigated during due diligence.
+  const systemPrompt = `You are an M&A risk analyst at a serial acquirer of vertical market software companies. Based on limited target company data, identify potential risks that should be investigated during due diligence.
 
 Respond with valid JSON:
 {
@@ -169,7 +169,7 @@ Respond with valid JSON:
   "overall_assessment": "1-2 sentence overall risk assessment"
 }
 
-Consider CSU/Harris evaluation criteria: customer concentration, churn, mission-criticality, switching costs, market position, technology durability, key-person dependency.`;
+Consider VMS evaluation criteria: customer concentration, churn, mission-criticality, switching costs, market position, technology durability, key-person dependency.`;
 
   const userPrompt = `Assess risks for this potential acquisition target:\n${JSON.stringify(targetData, null, 2)}`;
 

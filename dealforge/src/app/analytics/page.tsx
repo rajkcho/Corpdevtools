@@ -120,7 +120,7 @@ export default function AnalyticsPage() {
         <KPI label="Active Pipeline Value" value={fmt(totalPipelineValue, '$')} sub={`${active.length} active targets`} icon={<DollarSign size={16} />} />
         <KPI label="Closed Won Value" value={fmt(wonValue, '$')} sub={`${won.length} deals won`} icon={<TrendingUp size={16} />} color="var(--success)" />
         <KPI label="Win Rate" value={`${winRate}%`} sub={`${closedDeals} closed deals`} icon={<Activity size={16} />} color={winRate >= 25 ? 'var(--success)' : 'var(--warning)'} />
-        <KPI label="Proprietary Sourcing" value={`${proprietaryRatio}%`} sub="CSU benchmark: 60-70%" icon={<Users size={16} />} color={proprietaryRatio >= 60 ? 'var(--success)' : 'var(--warning)'} />
+        <KPI label="Proprietary Sourcing" value={`${proprietaryRatio}%`} sub="VMS benchmark: 60-70%" icon={<Users size={16} />} color={proprietaryRatio >= 60 ? 'var(--success)' : 'var(--warning)'} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -266,7 +266,7 @@ export default function AnalyticsPage() {
                 </div>
               ))}
               <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-                Harris criteria: Diversified Customers, Low Churn, Mission Critical, Market Share, Fragmented Competition, Growth Potential
+                VMS criteria: Diversified Customers, Low Churn, Mission Critical, Market Share, Fragmented Competition, Growth Potential
               </p>
             </div>
           )}

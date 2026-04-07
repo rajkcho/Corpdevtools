@@ -100,10 +100,10 @@ export default function DiligencePage() {
                 className="mt-1"
               />
               <div>
-                <div className="text-sm font-medium">Pre-populate with CSU/Harris DD templates</div>
+                <div className="text-sm font-medium">Pre-populate with VMS DD templates</div>
                 <div className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
-                  {countTemplateTasks()} tasks across 8 workstreams based on Constellation Software&apos;s
-                  due diligence methodology. Includes customer reference calls, financial normalization,
+                  {countTemplateTasks()} tasks across 8 workstreams based on vertical market software
+                  acquisition best practices. Includes customer reference calls, financial normalization,
                   operating ratio benchmarks, red flag checklists, and more.
                 </div>
               </div>
