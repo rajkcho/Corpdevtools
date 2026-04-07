@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getTargets, getContacts, getTouchpoints, createTouchpoint, logActivity } from '@/lib/db';
 import type { Target, Contact, Touchpoint } from '@/lib/types';
-import { Mail, Copy, Check, ChevronDown, Edit2, Clock, Trash2, Send, Plus, Save } from 'lucide-react';
+import { Mail, Copy, Check, ChevronDown, Edit2, Clock, Trash2, Send, Plus, Save, ChevronRight, Pause, Play } from 'lucide-react';
 
 interface EmailTemplate {
   id: string;
@@ -590,6 +590,9 @@ export default function OutreachPage() {
           </div>
         )}
       </div>
+      {/* Outreach Sequences */}
+      <OutreachSequences targets={targets} />
+
       {/* Outreach Cadence Planner */}
       <div className="glass-card p-5">
         <div className="flex items-center justify-between mb-4">
@@ -686,6 +689,297 @@ export default function OutreachPage() {
           );
         })()}
       </div>
+    </div>
+  );
+}
+
+// === Outreach Sequences Component ===
+interface SequenceStep {
+  id: string;
+  day: number;
+  template: string;
+  subject: string;
+}
+
+interface OutreachSequence {
+  id: string;
+  name: string;
+  steps: SequenceStep[];
+  targets: { targetId: string; currentStep: number; startedAt: string; pausedAt?: string; completedSteps: number[] }[];
+}
+
+function getSequences(): OutreachSequence[] {
+  if (typeof window === 'undefined') return [];
+  const raw = localStorage.getItem('dealforge_outreach_sequences');
+  return raw ? JSON.parse(raw) : [];
+}
+
+function saveSequences(seqs: OutreachSequence[]): void {
+  localStorage.setItem('dealforge_outreach_sequences', JSON.stringify(seqs));
+}
+
+function OutreachSequences({ targets }: { targets: Target[] }) {
+  const [sequences, setSequences] = useState<OutreachSequence[]>([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [expandedSeq, setExpandedSeq] = useState<string | null>(null);
+  const [addTargetSeq, setAddTargetSeq] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSequences(getSequences());
+  }, []);
+
+  const save = (updated: OutreachSequence[]) => {
+    setSequences(updated);
+    saveSequences(updated);
+  };
+
+  const createSequence = () => {
+    if (!newName.trim()) return;
+    const seq: OutreachSequence = {
+      id: crypto.randomUUID(),
+      name: newName,
+      steps: [
+        { id: crypto.randomUUID(), day: 0, template: 'cold_outreach', subject: 'Initial outreach' },
+        { id: crypto.randomUUID(), day: 3, template: 'follow_up', subject: 'Follow-up if no response' },
+        { id: crypto.randomUUID(), day: 7, template: 'nurture', subject: 'Value-add touchpoint' },
+        { id: crypto.randomUUID(), day: 14, template: 'follow_up', subject: 'Final follow-up' },
+      ],
+      targets: [],
+    };
+    save([...sequences, seq]);
+    setNewName('');
+    setShowCreate(false);
+    setExpandedSeq(seq.id);
+  };
+
+  const addTargetToSequence = (seqId: string, targetId: string) => {
+    save(sequences.map(s => {
+      if (s.id !== seqId) return s;
+      if (s.targets.find(t => t.targetId === targetId)) return s;
+      return {
+        ...s,
+        targets: [...s.targets, { targetId, currentStep: 0, startedAt: new Date().toISOString(), completedSteps: [] }],
+      };
+    }));
+    setAddTargetSeq(null);
+  };
+
+  const advanceStep = (seqId: string, targetId: string) => {
+    save(sequences.map(s => {
+      if (s.id !== seqId) return s;
+      return {
+        ...s,
+        targets: s.targets.map(t => {
+          if (t.targetId !== targetId) return t;
+          const nextStep = t.currentStep + 1;
+          return {
+            ...t,
+            currentStep: Math.min(nextStep, s.steps.length),
+            completedSteps: [...t.completedSteps, t.currentStep],
+          };
+        }),
+      };
+    }));
+  };
+
+  const togglePause = (seqId: string, targetId: string) => {
+    save(sequences.map(s => {
+      if (s.id !== seqId) return s;
+      return {
+        ...s,
+        targets: s.targets.map(t => {
+          if (t.targetId !== targetId) return t;
+          return { ...t, pausedAt: t.pausedAt ? undefined : new Date().toISOString() };
+        }),
+      };
+    }));
+  };
+
+  const removeTarget = (seqId: string, targetId: string) => {
+    save(sequences.map(s => {
+      if (s.id !== seqId) return s;
+      return { ...s, targets: s.targets.filter(t => t.targetId !== targetId) };
+    }));
+  };
+
+  const deleteSequence = (seqId: string) => {
+    if (!confirm('Delete this sequence?')) return;
+    save(sequences.filter(s => s.id !== seqId));
+  };
+
+  return (
+    <div className="glass-card p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-semibold flex items-center gap-2">
+          <ChevronRight size={16} style={{ color: 'var(--accent)' }} /> Outreach Sequences
+        </h2>
+        <button onClick={() => setShowCreate(!showCreate)} className="btn btn-primary btn-sm">
+          <Plus size={14} /> New Sequence
+        </button>
+      </div>
+
+      {showCreate && (
+        <div className="flex items-center gap-2 mb-4 p-3 rounded-lg" style={{ background: 'var(--background)' }}>
+          <input
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            placeholder="Sequence name (e.g., Cold Outreach - Healthcare)"
+            className="flex-1 text-sm"
+            onKeyDown={e => e.key === 'Enter' && createSequence()}
+            autoFocus
+          />
+          <button onClick={createSequence} disabled={!newName.trim()} className="btn btn-primary btn-sm">Create</button>
+          <button onClick={() => setShowCreate(false)} className="btn btn-ghost btn-sm">Cancel</button>
+        </div>
+      )}
+
+      {sequences.length === 0 ? (
+        <p className="text-sm" style={{ color: 'var(--muted)' }}>
+          No sequences yet. Create a multi-step outreach cadence to systematically engage targets.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {sequences.map(seq => {
+            const isExpanded = expandedSeq === seq.id;
+            const activeTargets = seq.targets.filter(t => t.currentStep < seq.steps.length && !t.pausedAt);
+            const pausedTargets = seq.targets.filter(t => t.pausedAt);
+            const completedTargets = seq.targets.filter(t => t.currentStep >= seq.steps.length);
+
+            return (
+              <div key={seq.id} className="rounded-lg" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>
+                {/* Header */}
+                <button
+                  onClick={() => setExpandedSeq(isExpanded ? null : seq.id)}
+                  className="w-full flex items-center gap-3 p-3 text-left"
+                >
+                  <ChevronRight size={14} style={{ color: 'var(--muted)', transform: isExpanded ? 'rotate(90deg)' : undefined, transition: 'transform 0.2s' }} />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium">{seq.name}</span>
+                    <span className="text-xs ml-2" style={{ color: 'var(--muted)' }}>{seq.steps.length} steps</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {activeTargets.length > 0 && <span className="badge" style={{ background: 'rgba(59,130,246,0.15)', color: 'var(--accent)' }}>{activeTargets.length} active</span>}
+                    {pausedTargets.length > 0 && <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--warning)' }}>{pausedTargets.length} paused</span>}
+                    {completedTargets.length > 0 && <span className="badge" style={{ background: 'rgba(16,185,129,0.15)', color: 'var(--success)' }}>{completedTargets.length} done</span>}
+                  </div>
+                </button>
+
+                {/* Expanded content */}
+                {isExpanded && (
+                  <div className="p-3 pt-0 space-y-3">
+                    {/* Steps overview */}
+                    <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                      {seq.steps.map((step, i) => (
+                        <div key={step.id} className="flex items-center gap-1 flex-shrink-0">
+                          <div className="px-2 py-1 rounded text-[10px] font-medium" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+                            Day {step.day}: {step.subject}
+                          </div>
+                          {i < seq.steps.length - 1 && <ChevronRight size={10} style={{ color: 'var(--muted)' }} />}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Targets in sequence */}
+                    {seq.targets.length > 0 ? (
+                      <div className="space-y-1">
+                        {seq.targets.map(st => {
+                          const target = targets.find(t => t.id === st.targetId);
+                          if (!target) return null;
+                          const isComplete = st.currentStep >= seq.steps.length;
+                          const isPaused = !!st.pausedAt;
+                          const currentStepInfo = seq.steps[st.currentStep];
+                          const daysSinceStart = Math.floor((Date.now() - new Date(st.startedAt).getTime()) / 86400000);
+
+                          return (
+                            <div key={st.targetId} className="flex items-center gap-2 p-2 rounded text-xs" style={{
+                              background: 'var(--card)',
+                              opacity: isPaused ? 0.6 : 1,
+                            }}>
+                              <span className="font-medium w-28 truncate">{target.name}</span>
+
+                              {/* Step progress dots */}
+                              <div className="flex items-center gap-0.5 flex-1">
+                                {seq.steps.map((_, i) => (
+                                  <div key={i} className="w-4 h-1.5 rounded-full" style={{
+                                    background: st.completedSteps.includes(i) ? 'var(--success)'
+                                      : i === st.currentStep && !isComplete ? 'var(--accent)'
+                                      : 'var(--border)',
+                                  }} />
+                                ))}
+                              </div>
+
+                              {/* Status */}
+                              {isComplete ? (
+                                <span className="text-[10px] font-medium" style={{ color: 'var(--success)' }}>Complete</span>
+                              ) : isPaused ? (
+                                <span className="text-[10px] font-medium" style={{ color: 'var(--warning)' }}>Paused</span>
+                              ) : currentStepInfo ? (
+                                <span className="text-[10px]" style={{ color: 'var(--muted)' }}>
+                                  Step {st.currentStep + 1}: {currentStepInfo.subject}
+                                </span>
+                              ) : null}
+
+                              <span className="text-[10px] font-mono" style={{ color: 'var(--muted)' }}>{daysSinceStart}d</span>
+
+                              {/* Actions */}
+                              <div className="flex items-center gap-1">
+                                {!isComplete && (
+                                  <button onClick={() => togglePause(seq.id, st.targetId)} className="btn-ghost p-0.5 rounded" title={isPaused ? 'Resume' : 'Pause'}>
+                                    {isPaused ? <Play size={12} style={{ color: 'var(--success)' }} /> : <Pause size={12} style={{ color: 'var(--warning)' }} />}
+                                  </button>
+                                )}
+                                {!isComplete && !isPaused && (
+                                  <button onClick={() => advanceStep(seq.id, st.targetId)} className="btn-ghost p-0.5 rounded" title="Mark step done & advance">
+                                    <Check size={12} style={{ color: 'var(--success)' }} />
+                                  </button>
+                                )}
+                                <button onClick={() => removeTarget(seq.id, st.targetId)} className="btn-ghost p-0.5 rounded" title="Remove">
+                                  <Trash2 size={10} style={{ color: 'var(--muted)' }} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs" style={{ color: 'var(--muted)' }}>No targets enrolled. Add targets to start the sequence.</p>
+                    )}
+
+                    {/* Add target / Delete */}
+                    <div className="flex items-center gap-2">
+                      {addTargetSeq === seq.id ? (
+                        <div className="flex items-center gap-2 flex-1">
+                          <select
+                            onChange={e => { if (e.target.value) addTargetToSequence(seq.id, e.target.value); }}
+                            className="flex-1 text-sm"
+                            defaultValue=""
+                          >
+                            <option value="">Select target...</option>
+                            {targets
+                              .filter(t => !['closed_won', 'closed_lost'].includes(t.stage) && !seq.targets.find(st => st.targetId === t.id))
+                              .map(t => <option key={t.id} value={t.id}>{t.name} ({t.vertical})</option>)}
+                          </select>
+                          <button onClick={() => setAddTargetSeq(null)} className="btn btn-ghost btn-sm">Cancel</button>
+                        </div>
+                      ) : (
+                        <>
+                          <button onClick={() => setAddTargetSeq(seq.id)} className="btn btn-secondary btn-sm">
+                            <Plus size={12} /> Add Target
+                          </button>
+                          <button onClick={() => deleteSequence(seq.id)} className="btn btn-ghost btn-sm ml-auto" style={{ color: 'var(--danger)' }}>
+                            <Trash2 size={12} /> Delete Sequence
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
