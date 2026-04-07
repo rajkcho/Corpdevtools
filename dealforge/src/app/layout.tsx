@@ -3,6 +3,7 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import CommandPalette from "@/components/CommandPalette";
 import ClientErrorBoundary from "@/components/ClientErrorBoundary";
+import QuickAdd from "@/components/QuickAdd";
 
 export const metadata: Metadata = {
   title: "DealForge - M&A Intelligence Platform",
@@ -35,6 +36,7 @@ export default function RootLayout({
           </ClientErrorBoundary>
         </main>
         <CommandPalette />
+        <QuickAdd />
       </body>
     </html>
   );

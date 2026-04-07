@@ -373,6 +373,121 @@ export default function PortfolioPage() {
             </div>
           )}
 
+          {/* Acquisition Timeline */}
+          {closedWon.length >= 2 && (
+            <div className="glass-card p-5">
+              <h2 className="font-semibold mb-3 flex items-center gap-2">
+                <Calendar size={16} style={{ color: 'var(--accent)' }} /> Acquisition Timeline
+              </h2>
+              <div className="space-y-3">
+                {(() => {
+                  const sorted = [...closedWon].sort((a, b) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime());
+                  let cumDeployed = 0;
+                  return sorted.map((t, i) => {
+                    cumDeployed += t.asking_price || 0;
+                    const daysInPipeline = Math.floor((new Date(t.updated_at).getTime() - new Date(t.created_at).getTime()) / 86400000);
+                    return (
+                      <div key={t.id} className="flex items-center gap-3">
+                        <div className="flex flex-col items-center flex-shrink-0" style={{ width: 24 }}>
+                          <div className="w-3 h-3 rounded-full" style={{ background: 'var(--success)', border: '2px solid var(--card)' }} />
+                          {i < sorted.length - 1 && <div className="w-0.5 flex-1 min-h-[20px]" style={{ background: 'var(--border)' }} />}
+                        </div>
+                        <Link href={`/targets/${t.id}`} className="flex-1 p-2 rounded-lg text-sm" style={{ background: 'var(--background)' }}>
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">{t.name}</span>
+                            <span className="text-xs font-mono" style={{ color: 'var(--muted)' }}>
+                              {new Date(t.updated_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{t.vertical}</span>
+                            {t.asking_price && <span className="text-xs font-mono" style={{ color: 'var(--success)' }}>{fmt(t.asking_price)}</span>}
+                            <span className="text-xs" style={{ color: 'var(--muted)' }}>{daysInPipeline}d in pipeline</span>
+                            <span className="text-xs font-mono ml-auto" style={{ color: 'var(--accent)' }}>Cum: {fmt(cumDeployed)}</span>
+                          </div>
+                        </Link>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* Portfolio ROI Metrics */}
+          {closedWon.filter(t => t.asking_price && t.revenue).length >= 1 && (
+            <div className="glass-card p-5">
+              <h2 className="font-semibold mb-3 flex items-center gap-2">
+                <TrendingUp size={16} style={{ color: 'var(--success)' }} /> Portfolio ROI Metrics
+              </h2>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <th className="text-left p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Company</th>
+                    <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Acquired For</th>
+                    <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Revenue</th>
+                    <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>EV/Rev</th>
+                    <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Recurring %</th>
+                    <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Margin</th>
+                    <th className="text-center p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {closedWon
+                    .filter(t => t.asking_price || t.revenue)
+                    .sort((a, b) => (b.asking_price || 0) - (a.asking_price || 0))
+                    .map(t => (
+                    <tr key={t.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td className="p-2">
+                        <Link href={`/targets/${t.id}`} className="font-medium hover:underline" style={{ color: 'var(--accent)' }}>{t.name}</Link>
+                        <div className="text-[10px]" style={{ color: 'var(--muted)' }}>{t.vertical}</div>
+                      </td>
+                      <td className="p-2 text-right font-mono">{t.asking_price ? fmt(t.asking_price) : '—'}</td>
+                      <td className="p-2 text-right font-mono">{t.revenue ? fmt(t.revenue) : '—'}</td>
+                      <td className="p-2 text-right font-mono font-bold" style={{ color: 'var(--accent)' }}>
+                        {t.asking_price && t.revenue ? `${(t.asking_price / t.revenue).toFixed(1)}x` : '—'}
+                      </td>
+                      <td className="p-2 text-right font-mono" style={{
+                        color: (t.recurring_revenue_pct || 0) >= 75 ? 'var(--success)' : (t.recurring_revenue_pct || 0) >= 60 ? 'var(--warning)' : 'var(--muted)',
+                      }}>
+                        {t.recurring_revenue_pct ? `${t.recurring_revenue_pct}%` : '—'}
+                      </td>
+                      <td className="p-2 text-right font-mono" style={{
+                        color: (t.ebita_margin_pct || 0) >= 20 ? 'var(--success)' : (t.ebita_margin_pct || 0) >= 10 ? 'var(--warning)' : 'var(--muted)',
+                      }}>
+                        {t.ebita_margin_pct ? `${t.ebita_margin_pct}%` : '—'}
+                      </td>
+                      <td className="p-2 text-center">
+                        {t.weighted_score ? (
+                          <span className="font-mono font-bold" style={{
+                            color: t.weighted_score >= 4 ? 'var(--success)' : t.weighted_score >= 3 ? 'var(--warning)' : 'var(--danger)',
+                          }}>{t.weighted_score.toFixed(1)}</span>
+                        ) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ borderTop: '2px solid var(--border)' }}>
+                    <td className="p-2 font-bold">Portfolio Total</td>
+                    <td className="p-2 text-right font-mono font-bold">{fmt(totalDeployed)}</td>
+                    <td className="p-2 text-right font-mono font-bold">{fmt(totalRevenue)}</td>
+                    <td className="p-2 text-right font-mono font-bold" style={{ color: 'var(--accent)' }}>
+                      {totalRevenue > 0 ? `${(totalDeployed / totalRevenue).toFixed(1)}x` : '—'}
+                    </td>
+                    <td className="p-2 text-right font-mono font-bold" style={{ color: weightedRecurring >= 75 ? 'var(--success)' : 'var(--warning)' }}>
+                      {weightedRecurring > 0 ? `${weightedRecurring.toFixed(0)}%` : '—'}
+                    </td>
+                    <td className="p-2 text-right font-mono">—</td>
+                    <td className="p-2 text-center font-mono font-bold" style={{ color: avgScore >= 4 ? 'var(--success)' : 'var(--warning)' }}>
+                      {avgScore > 0 ? avgScore.toFixed(1) : '—'}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+
           {/* Lost Deals Analysis */}
           {closedLost.length > 0 && (
             <div className="glass-card p-5">

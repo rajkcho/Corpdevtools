@@ -1507,6 +1507,103 @@ export default function AnalyticsPage() {
           </div>
         );
       })()}
+
+      {/* Deal Velocity Tracker */}
+      {(() => {
+        // Calculate avg days between stage transitions using activity log
+        const stageChanges = activities.filter(a => a.type === 'stage_changed' && a.metadata?.from && a.metadata?.to);
+        if (stageChanges.length < 2) return null;
+
+        // Group stage changes by target to calculate time in each stage
+        const targetStageHistory: Record<string, { stage: string; entered: number }[]> = {};
+        for (const sc of stageChanges.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())) {
+          if (!sc.target_id) continue;
+          if (!targetStageHistory[sc.target_id]) targetStageHistory[sc.target_id] = [];
+          targetStageHistory[sc.target_id].push({
+            stage: sc.metadata!.from!,
+            entered: new Date(sc.created_at).getTime(),
+          });
+        }
+
+        // Calculate avg time in each stage
+        const stageTimings: Record<string, number[]> = {};
+        for (const [, history] of Object.entries(targetStageHistory)) {
+          for (let i = 0; i < history.length - 1; i++) {
+            const stage = history[i].stage;
+            const daysInStage = (history[i + 1].entered - history[i].entered) / 86400000;
+            if (daysInStage > 0 && daysInStage < 365) { // filter outliers
+              if (!stageTimings[stage]) stageTimings[stage] = [];
+              stageTimings[stage].push(daysInStage);
+            }
+          }
+        }
+
+        const stageVelocity = DEAL_STAGES
+          .filter(s => !['closed_won', 'closed_lost'].includes(s.key))
+          .map(s => {
+            const timings = stageTimings[s.key] || [];
+            const avg = timings.length > 0 ? Math.round(timings.reduce((a, b) => a + b, 0) / timings.length) : 0;
+            const min = timings.length > 0 ? Math.round(Math.min(...timings)) : 0;
+            const max = timings.length > 0 ? Math.round(Math.max(...timings)) : 0;
+            return { ...s, avg, min, max, count: timings.length };
+          })
+          .filter(s => s.count > 0);
+
+        if (stageVelocity.length === 0) return null;
+
+        const maxAvg = Math.max(...stageVelocity.map(s => s.avg), 1);
+        const totalAvgDays = stageVelocity.reduce((s, v) => s + v.avg, 0);
+        const bottleneck = stageVelocity.reduce((a, b) => a.avg > b.avg ? a : b);
+
+        return (
+          <div className="glass-card p-5">
+            <h2 className="font-semibold mb-1 flex items-center gap-2">
+              <Clock size={16} style={{ color: 'var(--accent)' }} /> Deal Velocity Tracker
+            </h2>
+            <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>Average days spent in each pipeline stage based on historical transitions</p>
+
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-lg font-bold font-mono">{totalAvgDays}d</div>
+                <div className="text-[10px]" style={{ color: 'var(--muted)' }}>Est. Total Cycle</div>
+              </div>
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-lg font-bold font-mono" style={{ color: 'var(--warning)' }}>{bottleneck.avg}d</div>
+                <div className="text-[10px]" style={{ color: 'var(--muted)' }}>Bottleneck: {bottleneck.label}</div>
+              </div>
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--background)' }}>
+                <div className="text-lg font-bold font-mono">{stageChanges.length}</div>
+                <div className="text-[10px]" style={{ color: 'var(--muted)' }}>Stage Transitions Tracked</div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {stageVelocity.map(s => (
+                <div key={s.key} className="flex items-center gap-3">
+                  <span className="text-xs w-28 truncate" style={{ color: 'var(--muted-foreground)' }}>{s.label}</span>
+                  <div className="flex-1 h-6 rounded overflow-hidden" style={{ background: 'var(--background)' }}>
+                    <div
+                      className="h-full rounded flex items-center px-2 text-[10px] font-bold text-white"
+                      style={{
+                        width: `${Math.max((s.avg / maxAvg) * 100, 12)}%`,
+                        background: s.key === bottleneck.key ? 'var(--warning)' : s.color,
+                      }}
+                    >
+                      {s.avg}d avg
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono w-20 text-right" style={{ color: 'var(--muted)' }}>
+                    {s.min}-{s.max}d ({s.count})
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] mt-3" style={{ color: 'var(--muted)' }}>
+              Range shows min-max days · Count shows number of transitions tracked · Highlighted stage is the bottleneck
+            </p>
+          </div>
+        );
+      })()}
     </div>
   );
 }
