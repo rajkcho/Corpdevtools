@@ -419,6 +419,77 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Priority Actions - Smart next steps */}
+      {targets.length > 0 && (() => {
+        const actions: { priority: number; label: string; detail: string; href: string; color: string }[] = [];
+
+        // Overdue follow-ups
+        const overdueCount = touchpoints.filter(tp => tp.follow_up_date && new Date(tp.follow_up_date) < now).length;
+        if (overdueCount > 0) {
+          actions.push({ priority: 1, label: 'Follow up', detail: `${overdueCount} overdue follow-up${overdueCount > 1 ? 's' : ''}`, href: '/activity', color: 'var(--danger)' });
+        }
+
+        // Unscored targets in active stages
+        const unscoredActive = activeTargets.filter(t => !t.weighted_score && !['identified'].includes(t.stage));
+        if (unscoredActive.length > 0) {
+          actions.push({ priority: 3, label: 'Score targets', detail: `${unscoredActive.length} active target${unscoredActive.length > 1 ? 's' : ''} need scoring`, href: `/targets/${unscoredActive[0].id}`, color: 'var(--warning)' });
+        }
+
+        // Targets without contacts in advanced stages
+        const noContactTargets = activeTargets.filter(t =>
+          ['contacted', 'nurturing', 'loi_submitted', 'loi_signed', 'due_diligence', 'closing'].includes(t.stage) &&
+          allContacts.filter(c => c.target_id === t.id).length === 0
+        );
+        if (noContactTargets.length > 0) {
+          actions.push({ priority: 2, label: 'Add contacts', detail: `${noContactTargets.length} advanced target${noContactTargets.length > 1 ? 's' : ''} missing contacts`, href: `/targets/${noContactTargets[0].id}`, color: 'var(--warning)' });
+        }
+
+        // Stale deals needing attention
+        if (staleDeals.length > 0) {
+          actions.push({ priority: 2, label: 'Review stale deals', detail: `${staleDeals.length} deal${staleDeals.length > 1 ? 's' : ''} stale >30 days`, href: '/pipeline', color: 'var(--warning)' });
+        }
+
+        // DD projects with red RAG
+        const redDD = ddProjects.filter(p => p.rag_status === 'red' && p.status !== 'complete');
+        if (redDD.length > 0) {
+          actions.push({ priority: 1, label: 'DD at risk', detail: `${redDD.length} project${redDD.length > 1 ? 's' : ''} flagged red`, href: `/diligence/${redDD[0].id}`, color: 'var(--danger)' });
+        }
+
+        // Critical risks needing mitigation
+        if (criticalRisks.length > 0) {
+          actions.push({ priority: 1, label: 'Mitigate risks', detail: `${criticalRisks.length} critical risk${criticalRisks.length > 1 ? 's' : ''} open`, href: '/diligence', color: 'var(--danger)' });
+        }
+
+        // Targets in closing stage
+        const closingTargets = activeTargets.filter(t => t.stage === 'closing');
+        if (closingTargets.length > 0) {
+          actions.push({ priority: 1, label: 'Close deals', detail: `${closingTargets.length} target${closingTargets.length > 1 ? 's' : ''} in closing stage`, href: `/targets/${closingTargets[0].id}`, color: 'var(--success)' });
+        }
+
+        if (actions.length === 0) return null;
+        actions.sort((a, b) => a.priority - b.priority);
+
+        return (
+          <div className="glass-card p-5">
+            <h2 className="font-semibold mb-3">Priority Actions</h2>
+            <div className="flex flex-wrap gap-2">
+              {actions.slice(0, 6).map((a, i) => (
+                <Link
+                  key={i}
+                  href={a.href}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors"
+                  style={{ background: `${a.color}10`, border: `1px solid ${a.color}30` }}
+                >
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: a.color }} />
+                  <span className="font-medium">{a.label}</span>
+                  <span className="text-xs" style={{ color: 'var(--muted)' }}>{a.detail}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Overdue Follow-ups + Contacts Overview */}
       {(() => {
         const overdueFollowups = touchpoints

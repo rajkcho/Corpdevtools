@@ -6,7 +6,7 @@ import {
   ArrowLeft, Edit2, Trash2, Plus, Phone, Mail, Video,
   MessageSquare, Calendar, Upload, FileText, Link2,
   Users, ExternalLink, MapPin, Building2, ChevronDown, ChevronUp,
-  Download, Import, Printer, FileOutput,
+  Download, Import, Printer, FileOutput, Flag, CheckCircle2,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -491,6 +491,9 @@ export default function TargetDetailPage() {
               </div>
             );
           })()}
+
+          {/* Deal Milestones */}
+          <MilestoneTracker targetId={id} />
         </div>
       )}
 
@@ -1906,6 +1909,187 @@ function CompetitorTracker({ targetId }: { targetId: string }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// === MILESTONE TRACKER ===
+const DEFAULT_MILESTONES = [
+  { label: 'Initial Research Complete', category: 'research' },
+  { label: 'First Contact Made', category: 'outreach' },
+  { label: 'Management Meeting Scheduled', category: 'outreach' },
+  { label: 'Management Meeting Complete', category: 'outreach' },
+  { label: 'Financial Data Received', category: 'diligence' },
+  { label: 'Valuation Model Complete', category: 'diligence' },
+  { label: 'IC Memo Drafted', category: 'approval' },
+  { label: 'IC Approval Obtained', category: 'approval' },
+  { label: 'LOI Issued', category: 'deal' },
+  { label: 'LOI Signed', category: 'deal' },
+  { label: 'DD Kickoff', category: 'diligence' },
+  { label: 'DD Complete', category: 'diligence' },
+  { label: 'SPA Drafted', category: 'legal' },
+  { label: 'SPA Executed', category: 'legal' },
+  { label: 'Closing', category: 'deal' },
+];
+
+interface Milestone {
+  id: string;
+  label: string;
+  category: string;
+  completed: boolean;
+  completed_at?: string;
+  target_date?: string;
+  notes?: string;
+}
+
+function MilestoneTracker({ targetId }: { targetId: string }) {
+  const storageKey = `dealforge_milestones_${targetId}`;
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [customLabel, setCustomLabel] = useState('');
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      setMilestones(JSON.parse(saved));
+    } else {
+      const defaults: Milestone[] = DEFAULT_MILESTONES.map(m => ({
+        id: crypto.randomUUID(),
+        label: m.label,
+        category: m.category,
+        completed: false,
+      }));
+      setMilestones(defaults);
+      localStorage.setItem(storageKey, JSON.stringify(defaults));
+    }
+    setInitialized(true);
+  }, [storageKey]);
+
+  const save = (data: Milestone[]) => {
+    setMilestones(data);
+    localStorage.setItem(storageKey, JSON.stringify(data));
+  };
+
+  const toggle = (id: string) => {
+    save(milestones.map(m =>
+      m.id === id
+        ? { ...m, completed: !m.completed, completed_at: !m.completed ? new Date().toISOString() : undefined }
+        : m
+    ));
+  };
+
+  const setTargetDate = (id: string, date: string) => {
+    save(milestones.map(m => m.id === id ? { ...m, target_date: date || undefined } : m));
+  };
+
+  const addCustom = () => {
+    if (!customLabel.trim()) return;
+    save([...milestones, { id: crypto.randomUUID(), label: customLabel, category: 'custom', completed: false }]);
+    setCustomLabel('');
+    setShowAdd(false);
+  };
+
+  const removeMilestone = (id: string) => save(milestones.filter(m => m.id !== id));
+
+  if (!initialized) return null;
+
+  const completed = milestones.filter(m => m.completed).length;
+  const total = milestones.length;
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  const categoryColors: Record<string, string> = {
+    research: 'var(--accent)',
+    outreach: '#06B6D4',
+    diligence: 'var(--warning)',
+    approval: '#8B5CF6',
+    deal: 'var(--success)',
+    legal: '#F97316',
+    custom: 'var(--muted-foreground)',
+  };
+
+  return (
+    <div className="glass-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Flag size={16} style={{ color: 'var(--accent)' }} />
+          <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
+            Deal Milestones
+          </h3>
+          <span className="text-xs font-mono" style={{ color: pct === 100 ? 'var(--success)' : 'var(--muted)' }}>
+            {completed}/{total} ({pct}%)
+          </span>
+        </div>
+        <button onClick={() => setShowAdd(!showAdd)} className="btn btn-ghost btn-sm text-xs">
+          {showAdd ? 'Cancel' : '+ Custom'}
+        </button>
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-2 rounded-full mb-4" style={{ background: 'var(--background)' }}>
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: pct === 100 ? 'var(--success)' : 'var(--accent)' }} />
+      </div>
+
+      {showAdd && (
+        <div className="flex gap-2 mb-3">
+          <input value={customLabel} onChange={e => setCustomLabel(e.target.value)} className="flex-1 text-sm" placeholder="Custom milestone..." onKeyDown={e => e.key === 'Enter' && addCustom()} />
+          <button onClick={addCustom} disabled={!customLabel.trim()} className="btn btn-primary btn-sm">Add</button>
+        </div>
+      )}
+
+      <div className="space-y-1">
+        {milestones.map(m => {
+          const isOverdue = m.target_date && !m.completed && new Date(m.target_date).getTime() < Date.now();
+          return (
+            <div key={m.id} className="flex items-center gap-2 p-1.5 rounded group" style={{ background: m.completed ? 'rgba(16,185,129,0.05)' : 'transparent' }}>
+              <button onClick={() => toggle(m.id)} className="flex-shrink-0">
+                {m.completed
+                  ? <CheckCircle2 size={16} style={{ color: 'var(--success)' }} />
+                  : <div className="w-4 h-4 rounded-full border-2" style={{ borderColor: 'var(--border)' }} />
+                }
+              </button>
+              <span
+                className="text-sm flex-1"
+                style={{
+                  textDecoration: m.completed ? 'line-through' : 'none',
+                  opacity: m.completed ? 0.6 : 1,
+                  color: isOverdue ? 'var(--danger)' : undefined,
+                }}
+              >
+                {m.label}
+              </span>
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: categoryColors[m.category] || 'var(--muted)' }} />
+              <input
+                type="date"
+                value={m.target_date || ''}
+                onChange={e => setTargetDate(m.id, e.target.value)}
+                className="text-[10px] w-28 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                style={{ padding: '0.125rem' }}
+              />
+              {m.completed_at && (
+                <span className="text-[10px] font-mono" style={{ color: 'var(--muted)' }}>
+                  {new Date(m.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </span>
+              )}
+              {m.category === 'custom' && (
+                <button onClick={() => removeMilestone(m.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Trash2 size={10} style={{ color: 'var(--muted)' }} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 mt-3 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+        {Object.entries(categoryColors).filter(([k]) => milestones.some(m => m.category === k)).map(([key, color]) => (
+          <div key={key} className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full" style={{ background: color }} />
+            <span className="text-[10px] capitalize" style={{ color: 'var(--muted)' }}>{key}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
