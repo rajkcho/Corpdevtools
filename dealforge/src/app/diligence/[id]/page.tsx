@@ -785,10 +785,19 @@ function RisksPanel({ projectId, risks, onReload }: { projectId: string; risks: 
                 </div>
                 {r.description && <p className="text-sm mt-2" style={{ color: 'var(--muted-foreground)' }}>{r.description}</p>}
                 {r.mitigation && (
-                  <p className="text-sm mt-1" style={{ color: 'var(--success)' }}>Mitigation: {r.mitigation}</p>
+                  <div className="text-xs mt-2 p-2 rounded" style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--success)' }}>
+                    <span className="font-medium">Mitigation:</span> {r.mitigation}
+                  </div>
                 )}
+                <input
+                  placeholder="Mitigation strategy..."
+                  defaultValue={r.mitigation || ''}
+                  onBlur={e => { if (e.target.value !== (r.mitigation || '')) { updateDDRisk(r.id, { mitigation: e.target.value }); onReload(); } }}
+                  className="w-full text-xs mt-2"
+                  style={{ padding: '0.25rem 0.5rem' }}
+                />
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <select
                   value={r.status}
                   onChange={e => { updateDDRisk(r.id, { status: e.target.value as DDRisk['status'] }); onReload(); }}
@@ -912,10 +921,21 @@ function FindingsPanel({ projectId, findings, workstreams, onReload }: { project
                       )}
                     </div>
                     {f.description && <p className="text-sm mt-2" style={{ color: 'var(--muted-foreground)' }}>{f.description}</p>}
-                    {f.resolution && <p className="text-sm mt-1" style={{ color: 'var(--success)' }}>Resolution: {f.resolution}</p>}
+                    {f.resolution && (
+                      <div className="text-xs mt-2 p-2 rounded" style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--success)' }}>
+                        <span className="font-medium">Resolution:</span> {f.resolution}
+                      </div>
+                    )}
+                    <input
+                      placeholder={f.status === 'resolved' || f.status === 'accepted' ? 'Resolution notes...' : 'Add resolution notes...'}
+                      defaultValue={f.resolution || ''}
+                      onBlur={e => { if (e.target.value !== (f.resolution || '')) { updateDDFinding(f.id, { resolution: e.target.value }); onReload(); } }}
+                      className="w-full text-xs mt-2"
+                      style={{ padding: '0.25rem 0.5rem' }}
+                    />
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <select
                     value={f.status}
                     onChange={e => { updateDDFinding(f.id, { status: e.target.value as DDFinding['status'] }); onReload(); }}
