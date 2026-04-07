@@ -1059,6 +1059,146 @@ export default function AnalyticsPage() {
           </div>
         );
       })()}
+      {/* Cohort / Vintage Analysis */}
+      {targets.length > 3 && (() => {
+        // Group targets by month they entered the pipeline
+        const cohorts: Record<string, { label: string; targets: Target[]; won: number; lost: number; active: number; avgScore: number }> = {};
+        targets.forEach(t => {
+          const d = new Date(t.created_at);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          const label = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+          if (!cohorts[key]) cohorts[key] = { label, targets: [], won: 0, lost: 0, active: 0, avgScore: 0 };
+          cohorts[key].targets.push(t);
+          if (t.stage === 'closed_won') cohorts[key].won++;
+          else if (t.stage === 'closed_lost') cohorts[key].lost++;
+          else cohorts[key].active++;
+        });
+        Object.values(cohorts).forEach(c => {
+          const scored = c.targets.filter(t => t.weighted_score);
+          c.avgScore = scored.length > 0 ? scored.reduce((s, t) => s + (t.weighted_score || 0), 0) / scored.length : 0;
+        });
+        const sorted = Object.entries(cohorts).sort(([a], [b]) => a.localeCompare(b));
+        if (sorted.length < 2) return null;
+
+        return (
+          <div className="glass-card p-5">
+            <h2 className="font-semibold mb-1 flex items-center gap-2">
+              <Calendar size={16} style={{ color: 'var(--accent)' }} /> Cohort Analysis
+            </h2>
+            <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>Pipeline vintage — outcomes by month of entry</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <th className="text-left p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Cohort</th>
+                    <th className="text-center p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Total</th>
+                    <th className="text-center p-2 text-xs" style={{ color: 'var(--success)' }}>Won</th>
+                    <th className="text-center p-2 text-xs" style={{ color: 'var(--danger)' }}>Lost</th>
+                    <th className="text-center p-2 text-xs" style={{ color: 'var(--accent)' }}>Active</th>
+                    <th className="text-center p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Avg Score</th>
+                    <th className="p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Outcome Distribution</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map(([key, c]) => {
+                    const total = c.targets.length;
+                    const wonPct = (c.won / total) * 100;
+                    const lostPct = (c.lost / total) * 100;
+                    const activePct = (c.active / total) * 100;
+                    return (
+                      <tr key={key} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td className="p-2 font-medium">{c.label}</td>
+                        <td className="p-2 text-center font-mono">{total}</td>
+                        <td className="p-2 text-center font-mono" style={{ color: c.won > 0 ? 'var(--success)' : 'var(--muted)' }}>{c.won}</td>
+                        <td className="p-2 text-center font-mono" style={{ color: c.lost > 0 ? 'var(--danger)' : 'var(--muted)' }}>{c.lost}</td>
+                        <td className="p-2 text-center font-mono" style={{ color: c.active > 0 ? 'var(--accent)' : 'var(--muted)' }}>{c.active}</td>
+                        <td className="p-2 text-center font-mono" style={{ color: c.avgScore >= 3.5 ? 'var(--success)' : c.avgScore >= 2.5 ? 'var(--warning)' : 'var(--muted)' }}>
+                          {c.avgScore > 0 ? c.avgScore.toFixed(1) : '—'}
+                        </td>
+                        <td className="p-2">
+                          <div className="flex h-3 rounded-full overflow-hidden" style={{ background: 'var(--background)' }}>
+                            {wonPct > 0 && <div style={{ width: `${wonPct}%`, background: 'var(--success)' }} />}
+                            {activePct > 0 && <div style={{ width: `${activePct}%`, background: 'var(--accent)' }} />}
+                            {lostPct > 0 && <div style={{ width: `${lostPct}%`, background: 'var(--danger)' }} />}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center gap-4 mt-3 text-[10px]" style={{ color: 'var(--muted)' }}>
+              <span className="flex items-center gap-1"><span className="w-3 h-2 rounded" style={{ background: 'var(--success)' }} /> Won</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-2 rounded" style={{ background: 'var(--accent)' }} /> Active</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-2 rounded" style={{ background: 'var(--danger)' }} /> Lost</span>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Vertical Performance Matrix */}
+      {targets.length > 3 && (() => {
+        const verticalData = VERTICALS
+          .map(v => {
+            const vTargets = targets.filter(t => t.vertical === v);
+            if (vTargets.length === 0) return null;
+            const won = vTargets.filter(t => t.stage === 'closed_won').length;
+            const lost = vTargets.filter(t => t.stage === 'closed_lost').length;
+            const active = vTargets.filter(t => !['closed_won', 'closed_lost'].includes(t.stage)).length;
+            const avgRevenue = vTargets.filter(t => t.revenue).reduce((s, t) => s + (t.revenue || 0), 0) / (vTargets.filter(t => t.revenue).length || 1);
+            const avgScore = vTargets.filter(t => t.weighted_score).reduce((s, t) => s + (t.weighted_score || 0), 0) / (vTargets.filter(t => t.weighted_score).length || 1);
+            const pipelineValue = vTargets.reduce((s, t) => s + (t.asking_price || 0), 0);
+            return { vertical: v, total: vTargets.length, won, lost, active, avgRevenue, avgScore, pipelineValue };
+          })
+          .filter(Boolean)
+          .sort((a, b) => b!.total - a!.total) as { vertical: string; total: number; won: number; lost: number; active: number; avgRevenue: number; avgScore: number; pipelineValue: number }[];
+
+        if (verticalData.length < 2) return null;
+
+        return (
+          <div className="glass-card p-5">
+            <h2 className="font-semibold mb-1 flex items-center gap-2">
+              <MapPin size={16} style={{ color: 'var(--accent)' }} /> Vertical Performance Matrix
+            </h2>
+            <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>Deal performance metrics broken down by vertical market</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <th className="text-left p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Vertical</th>
+                    <th className="text-center p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Deals</th>
+                    <th className="text-center p-2 text-xs" style={{ color: 'var(--success)' }}>Won</th>
+                    <th className="text-center p-2 text-xs" style={{ color: 'var(--accent)' }}>Active</th>
+                    <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Avg Revenue</th>
+                    <th className="text-right p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Pipeline $</th>
+                    <th className="text-center p-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>Avg Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {verticalData.map(v => (
+                    <tr key={v.vertical} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td className="p-2 font-medium">{v.vertical}</td>
+                      <td className="p-2 text-center font-mono">{v.total}</td>
+                      <td className="p-2 text-center font-mono" style={{ color: v.won > 0 ? 'var(--success)' : 'var(--muted)' }}>{v.won}</td>
+                      <td className="p-2 text-center font-mono" style={{ color: v.active > 0 ? 'var(--accent)' : 'var(--muted)' }}>{v.active}</td>
+                      <td className="p-2 text-right font-mono">{v.avgRevenue > 0 ? fmt(v.avgRevenue, '$') : '—'}</td>
+                      <td className="p-2 text-right font-mono">{v.pipelineValue > 0 ? fmt(v.pipelineValue, '$') : '—'}</td>
+                      <td className="p-2 text-center">
+                        {v.avgScore > 0 ? (
+                          <span className="font-mono font-bold" style={{ color: v.avgScore >= 3.5 ? 'var(--success)' : v.avgScore >= 2.5 ? 'var(--warning)' : 'var(--danger)' }}>
+                            {v.avgScore.toFixed(1)}
+                          </span>
+                        ) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
